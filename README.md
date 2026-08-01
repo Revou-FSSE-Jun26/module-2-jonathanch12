@@ -1,3 +1,5 @@
+# How to Set Up the Database
+
 ## Step 1: Create the Database
 
 Before running the SQL scripts, you'll need to create an empty database named `revoshop_db`.
