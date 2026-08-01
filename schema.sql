@@ -21,7 +21,7 @@ create table products(
 	price numeric(10,2) not null,
 	stock int not null,
 	created_at timestamp default current_timestamp,
-	constraint fk_product_category foreign key(category_id) references categories(category_id)
+	constraint fk_product_category foreign key(category_id) references categories(category_id) on delete restrict
 );
 
 create table orders(
@@ -30,15 +30,15 @@ create table orders(
 	total_amount numeric(10,2) not null,
 	status varchar(255) not null,
 	created_at timestamp default current_timestamp,
-	constraint fk_order_user foreign key(user_id) references users(id)
+	constraint fk_order_user foreign key(user_id) references users(id) on delete restrict
 );
 
 create table order_items(
-	order_item_id serial primary key,
 	order_id int not null,
 	product_id int not null,
 	quantity int not null,
 	unit_price numeric(10,2) not null,
-	constraint fk_orderitem_order foreign key(order_id) references orders(order_id),
-	constraint fk_orderitem_product foreign key(product_id) references products(product_id)
+	primary key(order_id, product_id),
+	constraint fk_orderitem_order foreign key(order_id) references orders(order_id) on delete cascade,
+	constraint fk_orderitem_product foreign key(product_id) references products(product_id) on delete restrict
 );
