@@ -1,10 +1,10 @@
-insert into users(name, email, phone, address)
+insert into users(name, email, password, address)
 values
-('John Alexander', 'john@email.com', '081234567890', 'Park Ave 123'),
-('Sarah Tan', 'sarah@email.com', '081345678901', 'Milton 1'),
-('Michael Max', 'michael@email.com', '081456789012', 'Sora Area'),
-('Alonso Wirtz', 'alonso@email.com', '081567890123', 'Keynes 123'),
-('David Alten', 'david@email.com', '081678901234', 'Stamford 4');
+('John Alexander', 'john@email.com', 'John123', 'Park Ave 123'),
+('Sarah Tan', 'sarah@email.com', 'Sarah123', 'Milton 1'),
+('Michael Max', 'michael@email.com', 'Michael123', 'Sora Area'),
+('Alonso Wirtz', 'alonso@email.com', 'Alonso123', 'Keynes 123'),
+('David Alten', 'david@email.com', 'David123', 'Stamford 4');
 
 insert into categories(category_name, description)
 values
@@ -29,11 +29,11 @@ values
 
 insert into orders(user_id, total_amount, status)
 values
-(1,998000,'Completed'),
-(2,350000,'In Process'),
-(3,1370000,'Completed'),
-(1,275000,'Completed'),
-(5,850000,'In Process');
+(1,998000,'completed'),
+(2,350000,'processing'),
+(3,1370000,'completed'),
+(1,275000,'completed'),
+(5,850000,'processing');
 
 insert into order_items(order_id, product_id, quantity, unit_price)
 values
