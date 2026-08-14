@@ -1,5 +1,5 @@
 --Query to retrieve list of products with the stock being more than 20
-select product_id, product_name, price, stock
+select id, name, price, stock
 from products
 where stock > 20
 order by price desc
