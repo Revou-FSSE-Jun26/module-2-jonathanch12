@@ -58,6 +58,16 @@ class Product(db.Model):
 
     category = db.relationship('Category', primaryjoin='Product.category_id == Category.id', backref='products')
 
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.product_name,
+            'description': self.description,
+            'price': self.price,
+            'stock': self.stock,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
 
 
 class User(db.Model):
@@ -69,3 +79,11 @@ class User(db.Model):
     password = db.Column(db.String(255), nullable=False)
     address = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, server_default=db.FetchedValue())
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'email': self.email,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
