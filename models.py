@@ -12,16 +12,12 @@ class Category(db.Model):
 
 
 
-class OrderItem(db.Model):
-    __tablename__ = 'order_items'
-
-    order_id = db.Column(db.ForeignKey('orders.id', ondelete='CASCADE'), primary_key=True, nullable=False)
-    product_id = db.Column(db.ForeignKey('products.id', ondelete='RESTRICT'), primary_key=True, nullable=False)
-    quantity = db.Column(db.Integer, nullable=False)
-    unit_price = db.Column(db.Numeric(10, 2), nullable=False)
-
-    order = db.relationship('Order', primaryjoin='OrderItem.order_id == Order.id', backref='order_items')
-    product = db.relationship('Product', primaryjoin='OrderItem.product_id == Product.id', backref='order_items')
+order_items = db.Table('order_items',
+    db.Column('order_id', db.Integer, db.ForeignKey('orders.id', ondelete='CASCADE'), primary_key=True, nullable=False),
+    db.Column('product_id', db.Integer, db.ForeignKey('products.id', ondelete='RESTRICT'), primary_key=True, nullable=False),
+    db.Column('quantity', db.Integer, nullable=False),
+    db.Column('unit_price', db.Numeric(10, 2), nullable=False)
+)
 
 
 
@@ -38,6 +34,7 @@ class Order(db.Model):
     created_at = db.Column(db.DateTime, server_default=db.FetchedValue())
 
     user = db.relationship('User', primaryjoin='Order.user_id == User.id', backref='orders')
+    products = db.relationship('Product', secondary=order_items, backref='orders')
 
 
 

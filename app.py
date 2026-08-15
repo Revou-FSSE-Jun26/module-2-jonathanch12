@@ -14,7 +14,7 @@ db = SQLAlchemy(app)
 
 migrate = Migrate(app, db)
 
-from models import User, Product, Category, Order, OrderItem
+from models import User, Product, Category, Order, order_items
 
 #jangan lupa import routes dibawah
 from routes import *
