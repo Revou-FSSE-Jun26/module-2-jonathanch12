@@ -58,6 +58,7 @@ module-2-jonathanch12/
 │   ├── alembic.ini
 │   ├── env.py
 │   └── script.py.mako
+├── postman_screenshots/                        # Screenshots documentation for Postman testing
 ├── .env                                        # Environment variables (not committed)
 ├── .gitignore
 ├── app.py                                      # Flask app setup and configuration
