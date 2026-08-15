@@ -6,7 +6,7 @@ values
 ('Alonso Wirtz', 'alonso@email.com', 'Alonso123', 'Keynes 123'),
 ('David Alten', 'david@email.com', 'David123', 'Stamford 4');
 
-insert into categories(category_name, description)
+insert into categories(name, description)
 values
 ('Electonics', 'Electronic gadgets'),
 ('Books', 'Educational and fiction books'),
@@ -14,7 +14,7 @@ values
 ('Sports', 'Sporting equipment'),
 ('Fashion', 'Clothing and accessories');
 
-insert into products(category_id, product_name, description, price, stock)
+insert into products(category_id, name, description, price, stock)
 values
 (1,'Logitech Wireless Mouse','Bluetooth Mouse',199000,50),
 (1,'Razer Mechanical Keyboard','RGB Keyboard',799000,25),
