@@ -15,3 +15,13 @@ Thumbs.db
 # PostgreSQL Backup Files
 *.backup
 *.dump
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+venv/
+.venv/
+env/

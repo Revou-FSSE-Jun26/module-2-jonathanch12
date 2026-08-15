@@ -79,11 +79,13 @@ class User(db.Model):
     password = db.Column(db.String(255), nullable=False)
     address = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, server_default=db.FetchedValue())
+    role = db.Column(db.String(50), nullable=False, server_default='user')
 
     def to_dict(self):
         return {
             'id': self.id,
             'name': self.name,
             'email': self.email,
+            'role': self.role,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
