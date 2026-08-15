@@ -61,7 +61,7 @@ class Product(db.Model):
     def to_dict(self):
         return {
             'id': self.id,
-            'name': self.product_name,
+            'name': self.name,
             'description': self.description,
             'price': self.price,
             'stock': self.stock,
