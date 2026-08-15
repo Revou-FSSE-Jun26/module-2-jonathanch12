@@ -1,63 +1,164 @@
-# How to Set Up the Database
+# RevoShop — A Simple e-Commerce Backend
 
-## Step 1: Create the Database
+RevoShop is a backend API for an online retail store, built with Flask and PostgreSQL. It provides RESTful endpoints for managing users, products, categories, and orders, including a many-to-many relationship between orders and products through an association table.
 
-Before running the SQL scripts, you'll need to create an empty database named `revoshop_db`.
+---
 
-### Using DBeaver
+## Project Goals
 
-1. Open **DBeaver** and connect to your PostgreSQL server.
-2. In the **Database Navigator** (left sidebar), expand your PostgreSQL connection.
-3. Right-click **Databases** and select **Create New Database**.
-4. Enter the following database name:
+- Build a Flask application connected to a PostgreSQL database via SQLAlchemy.
+- Define models that mirror the database schema (users, products, categories, orders, order_items).
+- Implement user registration and retrieval routes.
+- Implement product listing and retrieval routes.
+- Manage schema changes using Flask-Migrate (Alembic).
+- Demonstrate a many-to-many relationship between orders and products.
 
-```text
-revoshop_db
+---
+
+## Tech Stack
+
+- **Language:** Python 3
+- **Framework:** Flask
+- **Database:** PostgreSQL
+- **ORM:** SQLAlchemy (via Flask-SQLAlchemy)
+- **Migrations:** Flask-Migrate (Alembic)
+- **Password Hashing:** bcrypt
+
+---
+
+## Database
+
+The application uses a PostgreSQL database named `revoshop_db` with the following tables:
+
+| Table | Description |
+|-------|-------------|
+| `users` | Stores registered users (name, email, password, address, role) |
+| `categories` | Product categories (name, description) |
+| `products` | Products linked to a category (name, description, price, stock) |
+| `orders` | Orders placed by users (total_amount, status) |
+| `order_items` | Association table linking orders to products (quantity, unit_price) |
+
+### ERD (Entity Relationship Diagram)
+
+![ERD Diagram](database/Schema%20Diagram%20(ERD_Screenshot_DBeaver).png)
+
+---
+
+## Folder Structure
+
+```
+module-2-jonathanch12/
+├── database/
+│   ├── schema.sql                              # Table creation scripts
+│   ├── seed.sql                                # Sample data
+│   ├── queries.sql                             # Example queries
+│   └── Schema Diagram (ERD_Screenshot_DBeaver).png  # ERD screenshot
+├── migrations/
+│   ├── versions/                               # Migration history
+│   ├── alembic.ini
+│   ├── env.py
+│   └── script.py.mako
+├── .env                                        # Environment variables (not committed)
+├── .gitignore
+├── app.py                                      # Flask app setup and configuration
+├── models.py                                   # SQLAlchemy models
+├── routes.py                                   # API route definitions
+├── requirements.txt                            # Python dependencies
+└── README.md
 ```
 
-5. Click **OK** to create the database.
+---
 
-You should now see `revoshop_db` listed under the **Databases** section.
+## Setup & Installation
 
-> **Note:** If a database with the same name already exists, you can either delete it or choose a different name.
+### Prerequisites
+
+- Python 3 installed
+- PostgreSQL installed and running
+- DBeaver (or any PostgreSQL client) for database management
+
+### 1. Clone the Repository
+
+```bash
+git clone <repository-url>
+cd module-2-jonathanch12
+```
+
+### 2. Create and Activate a Virtual Environment
+
+```bash
+python -m venv venv
+```
+
+- **Windows:**
+  ```bash
+  venv\Scripts\activate
+  ```
+- **macOS/Linux:**
+  ```bash
+  source venv/bin/activate
+  ```
+
+### 3. Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Set Up the Database
+
+Follow the steps below using DBeaver (or any PostgreSQL client):
+
+1. Create a new database named `revoshop_db`.
+2. Open `database/schema.sql` and execute it to create the tables.
+3. Open `database/seed.sql` and execute it to insert sample data.
+4. (Optional) Run `database/queries.sql` to verify the data.
+
+### 5. Configure the `.env` File
+
+Create a `.env` file in the project root with the following variable:
+
+```
+DATABASE_URL=postgresql://username:password@localhost/revoshop_db
+```
+
+Replace `username` and `password` with your PostgreSQL credentials.
+
+> **Note:** The `.env` file is included in `.gitignore` and will not be committed to the repository. This keeps your database credentials secure.
+
+### 6. Run Migrations
+
+```bash
+flask db upgrade
+```
+
+This applies all existing migrations (including the `role` column addition to `users`).
+
+### 7. Run the Application
+
+```bash
+flask run --debug
+```
+
+The app will be available at `http://127.0.0.1:5000`.
 
 ---
 
-## Step 2: Open an SQL Editor
+## API Endpoints
 
-1. In the **Database Navigator**, select the `revoshop_db` database.
-2. Right-click the database and choose **SQL Editor → New SQL Script**.
-3. A new SQL editor tab will open.
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/` | Database connection test |
+| GET | `/products` | List all products |
+| GET | `/products/<id>` | Get a product by ID |
+| POST | `/users/register` | Register a new user |
+| GET | `/users/<id>` | Get a user by ID |
 
-This is where you'll run the SQL scripts included in this repository.
+### Postman Documentation
 
----
+Full API documentation with request/response examples:
 
-## Step 3: Create the Tables
-
-1. Open the `schema.sql` file from this repository.
-2. Copy all of its contents and paste them into the SQL editor.
-3. Click the **Execute SQL Script** button or press **Ctrl + Enter** (Windows/Linux) or **⌘ + Enter** (macOS).
-
-If the script runs successfully, DBeaver will display a success message, and the tables will be created in the `revoshop_db` database.
-
----
-
-## Step 4: Insert Sample Data
-
-1. Open the `seed.sql` file.
-2. Copy its contents into a new SQL editor tab (or clear the current one).
-3. Execute the script using the **Execute** button or **Ctrl + Enter**.
-
-This will populate the database with sample users, categories, products, orders, and order items.
-
----
-
-## Step 5: Run the Example Queries
-
-Finally, open `queries.sql`, execute the statements, and review the results displayed in DBeaver's **Results** panel.
-
-If you can see rows returned by the queries, your database has been set up successfully! 
+https://documenter.getpostman.com/view/57333016/2sBYApzDBC
 
 ---
 
