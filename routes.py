@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 from app import db
-from models import User, Product
+from models import User, Product, Category
 from sqlalchemy.exc import IntegrityError
 import bcrypt
 
@@ -116,3 +116,62 @@ def get_product_by_id(product_id):
             return jsonify({"message": "Product not found", "status": "not found"}), 404
     except Exception as e:
         return jsonify({"message": "Failed to get product by id", "status": "error"}), 500
+
+# Create new product (POST)
+@product_bp.route('/', methods=['POST'])
+def create_product():
+    data = request.get_json()
+    try:
+        for field in ['category_id', 'name', 'description', 'price', 'stock']:
+            if field not in data:
+                return jsonify({"message": "Please fill missing fields", "status": "error"}), 400
+
+        category = Category.query.get(data['category_id'])
+        if not category:
+            return jsonify({"message": "Category not found", "status": "error"}), 404
+
+        product = Product(
+            category_id=data['category_id'],
+            name=data['name'],
+            description=data['description'],
+            price=data['price'],
+            stock=data['stock']
+        )
+        db.session.add(product)
+        db.session.commit()
+        return jsonify({"message": "Product created successfully", "product": product.to_dict(), "status": "ok"}), 201
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error creating product: {e}")
+        return jsonify({"message": "Failed to create product", "status": "error"}), 500
+
+# Update existing product (PUT)
+@product_bp.route('/<int:product_id>', methods=['PUT'])
+def update_product(product_id):
+    data = request.get_json()
+    try:
+        product = Product.query.get(product_id)
+        if not product:
+            return jsonify({"message": "Product not found", "status": "not found"}), 404
+
+        if 'category_id' in data:
+            category = Category.query.get(data['category_id'])
+            if not category:
+                return jsonify({"message": "Category not found", "status": "error"}), 404
+            product.category_id = data['category_id']
+
+        if 'name' in data:
+            product.name = data['name']
+        if 'description' in data:
+            product.description = data['description']
+        if 'price' in data:
+            product.price = data['price']
+        if 'stock' in data:
+            product.stock = data['stock']
+
+        db.session.commit()
+        return jsonify({"message": "Product updated successfully", "product": product.to_dict(), "status": "ok"}), 200
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error updating product: {e}")
+        return jsonify({"message": "Failed to update product", "status": "error"}), 500
