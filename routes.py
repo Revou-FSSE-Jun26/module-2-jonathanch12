@@ -25,7 +25,7 @@ def home():
 # ==================== User Routes ====================
 
 # Register new user (POST)
-@user_bp.route('/register', methods=['POST'])
+@user_bp.route('/', methods=['POST'])
 def register_user():
     data = request.get_json()
     try:
