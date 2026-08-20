@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 from app import db
-from models import User, Product, Category
+from models import User, Product, Category, order_items
 from sqlalchemy.exc import IntegrityError
 import bcrypt
 
@@ -175,3 +175,27 @@ def update_product(product_id):
         db.session.rollback()
         print(f"Error updating product: {e}")
         return jsonify({"message": "Failed to update product", "status": "error"}), 500
+
+# Delete existing product (DELETE)
+@product_bp.route('/<int:product_id>', methods=['DELETE'])
+def delete_product(product_id):
+    try:
+        product = Product.query.get(product_id)
+        if not product:
+            return jsonify({"message": "Product not found", "status": "not found"}), 404
+
+        # Check if product has active orders
+        exists = db.session.query(order_items).filter(order_items.c.product_id == product_id).first()
+        if exists:
+            return jsonify({"message": "Cannot delete product with active orders", "status": "error"}), 409
+
+        db.session.delete(product)
+        db.session.commit()
+        return jsonify({"message": "Product deleted successfully", "status": "ok"}), 200
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({"message": "Cannot delete product with active orders", "status": "error"}), 409
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error deleting product: {e}")
+        return jsonify({"message": "Failed to delete product", "status": "error"}), 500
