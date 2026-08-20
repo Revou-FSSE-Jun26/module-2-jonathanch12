@@ -39,11 +39,22 @@ class Order(db.Model):
     id = db.Column(db.Integer, primary_key=True, server_default=db.FetchedValue())
     user_id = db.Column(db.ForeignKey('users.id', ondelete='RESTRICT'), nullable=False)
     total_amount = db.Column(db.Numeric(10, 2), nullable=False)
-    status = db.Column(db.String(20), nullable=False)
+    status = db.Column(db.String(20), nullable=False, server_default='pending')
     created_at = db.Column(db.DateTime, server_default=db.FetchedValue())
+    is_deleted = db.Column(db.Boolean, nullable=False, server_default=db.text('false'))
+    deleted_at = db.Column(db.DateTime, nullable=True)
 
     user = db.relationship('User', primaryjoin='Order.user_id == User.id', backref='orders')
     products = db.relationship('Product', secondary=order_items, backref='orders')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'total_amount': float(self.total_amount),
+            'status': self.status,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
 
 
 
