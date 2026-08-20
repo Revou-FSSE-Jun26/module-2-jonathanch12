@@ -1,4 +1,4 @@
-# RevoShop — A Simple e-Commerce Backend
+# RevoShop — A Simple e-Commerce Backend [IN DEVELOPMENT]
 
 RevoShop is a backend API for an online retail store, built with Flask and PostgreSQL. It provides RESTful endpoints for managing users, products, categories, and orders, including a many-to-many relationship between orders and products through an association table.
 
