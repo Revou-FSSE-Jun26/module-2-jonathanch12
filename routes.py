@@ -10,6 +10,9 @@ main_bp = Blueprint('main', __name__)
 # User blueprint
 user_bp = Blueprint('user', __name__, url_prefix='/users')
 
+# Auth blueprint
+auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
+
 # Product blueprint
 product_bp = Blueprint('product', __name__, url_prefix='/products')
 
@@ -35,7 +38,7 @@ def register_user():
         user = User(
                     name=data.get('name'),
                     email=data.get('email'),
-                    password = bcrypt.hashpw(data["password"].encode("utf-8"), bcrypt.gensalt()),
+                    password = bcrypt.hashpw(data["password"].encode("utf-8"), bcrypt.gensalt()).decode("utf-8"),
                     address = data.get('address')
                 )
         db.session.add(user)
@@ -61,6 +64,34 @@ def get_user_by_id(user_id):
             return jsonify({"message": "User not found", "status": "ok"}), 404
     except Exception as e:
         return jsonify({"message": "Error getting user", "status": "error"}), 500
+
+
+# ==================== Auth Routes ====================
+
+# Login user (POST)
+@auth_bp.route('/login', methods=['POST'])
+def login_user():
+    data = request.get_json()
+    try:
+        if 'email' not in data or 'password' not in data:
+            return jsonify({"message": "Please provide email and password", "status": "error"}), 400
+
+        user = User.query.filter_by(email=data['email']).first()
+        if not user:
+            return jsonify({"message": "Invalid email or password", "status": "error"}), 401
+
+        if isinstance(user.password, bytes):
+            hashed_password = user.password
+        else:
+            hashed_password = user.password.encode('utf-8')
+
+        if not bcrypt.checkpw(data['password'].encode('utf-8'), hashed_password):
+            return jsonify({"message": "Invalid email or password", "status": "error"}), 401
+
+        return jsonify({"message": "Login successful", "user_id": user.id, "status": "ok"}), 200
+    except Exception as e:
+        print(f"Error logging in: {e}")
+        return jsonify({"message": "Login error", "status": "error"}), 500
 
 
 # ==================== Product Routes ====================
