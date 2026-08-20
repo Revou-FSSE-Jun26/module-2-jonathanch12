@@ -16,5 +16,8 @@ migrate = Migrate(app, db)
 
 from models import User, Product, Category, Order, order_items
 
-#jangan lupa import routes dibawah
-from routes import *
+from routes import main_bp, user_bp, product_bp
+
+app.register_blueprint(main_bp)
+app.register_blueprint(user_bp)
+app.register_blueprint(product_bp)

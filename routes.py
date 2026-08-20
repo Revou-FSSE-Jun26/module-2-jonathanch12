@@ -1,16 +1,31 @@
-from flask import jsonify, request
-from app import app, db
+from flask import Blueprint, jsonify, request
+from app import db
 from models import User, Product
 from sqlalchemy.exc import IntegrityError
 import bcrypt
 
+# Main blueprint (general/utility routes)
+main_bp = Blueprint('main', __name__)
+
+# User blueprint
+user_bp = Blueprint('user', __name__, url_prefix='/users')
+
+# Product blueprint
+product_bp = Blueprint('product', __name__, url_prefix='/products')
+
+
+# ==================== Main Routes ====================
+
 # Database connection test
-@app.route('/')
+@main_bp.route('/')
 def home():
     return jsonify({"message": "Connected to database successfully", "status": "ok"})
 
+
+# ==================== User Routes ====================
+
 # Register new user (POST)
-@app.route('/users/register', methods=['POST'])
+@user_bp.route('/register', methods=['POST'])
 def register_user():
     data = request.get_json()
     try:
@@ -36,7 +51,7 @@ def register_user():
         return jsonify({"message": "User registration error", "status": "error"}), 500
 
 # Get user's data by ID (GET)
-@app.route('/users/<int:user_id>', methods=['GET'])
+@user_bp.route('/<int:user_id>', methods=['GET'])
 def get_user_by_id(user_id):
     try:
         user = User.query.get(user_id)
@@ -47,8 +62,11 @@ def get_user_by_id(user_id):
     except Exception as e:
         return jsonify({"message": "Error getting user", "status": "error"}), 500
 
+
+# ==================== Product Routes ====================
+
 # Get all products (GET)
-@app.route('/products', methods=['GET'])
+@product_bp.route('/', methods=['GET'])
 def get_products():
     try:
         products = Product.query.all()
@@ -57,7 +75,7 @@ def get_products():
         return jsonify({"message": "Failed to get products", "status": "error"}), 500
 
 # Get product's data by ID (GET)
-@app.route('/products/<int:product_id>', methods=['GET'])
+@product_bp.route('/<int:product_id>', methods=['GET'])
 def get_product_by_id(product_id):
     try:
         product = Product.query.get(product_id)
