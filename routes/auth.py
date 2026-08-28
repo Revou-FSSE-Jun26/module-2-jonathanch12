@@ -1,4 +1,5 @@
 from flask import Blueprint, jsonify, request
+from flask_jwt_extended import create_access_token, create_refresh_token
 from models import User
 import bcrypt
 
@@ -26,7 +27,18 @@ def login_user():
         if not bcrypt.checkpw(data['password'].encode('utf-8'), hashed_password):
             return jsonify({"message": "Invalid email or password", "status": "error"}), 401
 
-        return jsonify({"message": "Login successful", "user_id": user.id, "status": "ok"}), 200
+        # Create JWT tokens with user role as additional claim
+        additional_claims = {"role": user.role}
+        access_token = create_access_token(identity=str(user.id), additional_claims=additional_claims)
+        refresh_token = create_refresh_token(identity=str(user.id), additional_claims=additional_claims)
+
+        return jsonify({
+            "message": "Login successful",
+            "name": user.name,
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "status": "ok"
+        }), 200
     except Exception as e:
         print(f"Error logging in: {e}")
         return jsonify({"message": "Login error", "status": "error"}), 500
