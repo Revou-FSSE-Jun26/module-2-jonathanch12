@@ -1,17 +1,19 @@
 # RevoShop — A Simple e-Commerce Backend [IN DEVELOPMENT]
 
-RevoShop is a backend API for an online retail store, built with Flask and PostgreSQL. It provides RESTful endpoints for managing users, products, categories, and orders, including a many-to-many relationship between orders and products through an association table.
+RevoShop is a backend API for an online retail store, built with Flask and PostgreSQL. It provides RESTful endpoints for managing users, products, categories, and orders, with JWT-based authentication and role-based access control (admin/customer).
 
 ---
 
 ## Project Goals
 
-- Build a Flask application connected to a PostgreSQL database via SQLAlchemy.
+- Build a Flask application using the application factory pattern, connected to PostgreSQL via SQLAlchemy.
 - Define models that mirror the database schema (users, products, categories, orders, order_items).
-- Implement user registration and retrieval routes.
-- Implement product listing and retrieval routes.
+- Implement JWT authentication with role-based access control (admin, customer).
+- Implement CRUD routes for users, products, categories, and orders.
+- Support soft deletion for products, categories, and orders.
 - Manage schema changes using Flask-Migrate (Alembic).
-- Demonstrate a many-to-many relationship between orders and products.
+- Demonstrate a many-to-many relationship between orders and products through an association table.
+- Include unit tests using pytest and load testing using Locust.
 
 ---
 
@@ -22,20 +24,22 @@ RevoShop is a backend API for an online retail store, built with Flask and Postg
 - **Database:** PostgreSQL
 - **ORM:** SQLAlchemy (via Flask-SQLAlchemy)
 - **Migrations:** Flask-Migrate (Alembic)
+- **Authentication:** Flask-JWT-Extended (JWT access and refresh tokens)
 - **Password Hashing:** bcrypt
+- **Testing:** pytest (unit tests), Locust (load/performance testing)
 
 ---
 
 ## Database
 
-The application uses a PostgreSQL database named `revoshop_db` with the following tables:
+The application uses a PostgreSQL database with the following tables:
 
 | Table | Description |
 |-------|-------------|
-| `users` | Stores registered users (name, email, password, address, role) |
-| `categories` | Product categories (name, description) |
-| `products` | Products linked to a category (name, description, price, stock) |
-| `orders` | Orders placed by users (total_amount, status) |
+| `users` | Registered users (name, email, password, address, role) |
+| `categories` | Product categories with soft deletion (name, description, is_deleted) |
+| `products` | Products linked to a category with soft deletion (name, description, price, stock, is_deleted) |
+| `orders` | Orders placed by users with soft deletion (total_amount, status, is_deleted) |
 | `order_items` | Association table linking orders to products (quantity, unit_price) |
 
 ### ERD (Entity Relationship Diagram)
@@ -50,20 +54,38 @@ The application uses a PostgreSQL database named `revoshop_db` with the followin
 module-2-jonathanch12/
 ├── database/
 │   ├── schema.sql                              # Table creation scripts
-│   ├── seed.sql                                # Sample data
+│   ├── seed.sql                                # Sample data (SQL)
 │   ├── queries.sql                             # Example queries
-│   └── Schema Diagram (ERD_Screenshot_DBeaver).png  # ERD screenshot
+│   └── Schema Diagram (ERD_Screenshot_DBeaver).png
+├── helper/
+│   └── seed.py                                 # Python database seeder (bcrypt-hashed passwords)
 ├── migrations/
 │   ├── versions/                               # Migration history
 │   ├── alembic.ini
 │   ├── env.py
 │   └── script.py.mako
-├── postman_screenshots/                        # Screenshots documentation for Postman testing
+├── routes/
+│   ├── __init__.py                             # Blueprint exports
+│   ├── main.py                                 # Home/health check route
+│   ├── user.py                                 # User registration and retrieval
+│   ├── auth.py                                 # Login (JWT token generation)
+│   ├── product.py                              # Product CRUD (admin-protected)
+│   ├── category.py                             # Category CRUD (admin-protected)
+│   └── order.py                                # Order creation and management
+├── tests/
+│   ├── conftest.py                             # Pytest fixtures (app, client, tokens)
+│   ├── test_auth.py                            # Login route tests
+│   ├── test_user.py                            # Registration route tests
+│   ├── test_category.py                        # Category route tests
+│   ├── test_product.py                         # Product route tests
+│   └── test_order.py                           # Order route tests
+├── postman_screenshots/                        # Postman testing screenshots
 ├── .env                                        # Environment variables (not committed)
+├── .env.example                                # Environment variable template
 ├── .gitignore
-├── app.py                                      # Flask app setup and configuration
+├── app.py                                      # Flask app factory (create_app)
 ├── models.py                                   # SQLAlchemy models
-├── routes.py                                   # API route definitions
+├── locustfile.py                               # Load testing configuration
 ├── requirements.txt                            # Python dependencies
 └── README.md
 ```
@@ -108,32 +130,35 @@ pip install -r requirements.txt
 
 ### 4. Set Up the Database
 
-Follow the steps below using DBeaver (or any PostgreSQL client):
-
-1. Create a new database named `revoshop_db`.
-2. Open `database/schema.sql` and execute it to create the tables.
-3. Open `database/seed.sql` and execute it to insert sample data.
-4. (Optional) Run `database/queries.sql` to verify the data.
+1. Create a new PostgreSQL database.
+2. Execute `database/schema.sql` to create the tables.
+3. Mark migrations as applied:
+   ```bash
+   flask db stamp head
+   ```
 
 ### 5. Configure the `.env` File
 
-Create a `.env` file in the project root with the following variable:
+Create a `.env` file in the project root (see `.env.example` for reference):
 
 ```
-DATABASE_URL=postgresql://username:password@localhost/revoshop_db
+DATABASE_URL="postgresql://username:password@localhost/your_db_name"
+JWT_SECRET_KEY="your-generated-secret-key"
 ```
 
-Replace `username` and `password` with your PostgreSQL credentials.
-
-> **Note:** The `.env` file is included in `.gitignore` and will not be committed to the repository. This keeps your database credentials secure.
-
-### 6. Run Migrations
+Generate the JWT secret key:
 
 ```bash
-flask db upgrade
+python -c "import secrets; print(secrets.token_hex(32))"
 ```
 
-This applies all existing migrations (including the `role` column addition to `users`).
+### 6. Seed the Database
+
+```bash
+python helper/seed.py
+```
+
+This inserts sample users (with bcrypt-hashed passwords), categories, and products.
 
 ### 7. Run the Application
 
@@ -147,19 +172,106 @@ The app will be available at `http://127.0.0.1:5000`.
 
 ## API Endpoints
 
+### Public Routes
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/` | Database connection test |
-| GET | `/products` | List all products |
-| GET | `/products/<id>` | Get a product by ID |
-| POST | `/users/register` | Register a new user |
-| GET | `/users/<id>` | Get a user by ID |
+| GET | `/` | Health check |
+| GET | `/products/` | List all products |
+| GET | `/products/<id>` | Get product by ID |
+| GET | `/categories/` | List all categories |
+| GET | `/categories/<id>` | Get category by ID (includes products) |
 
-### Postman Documentation
+### Authentication
 
-Full API documentation with request/response examples:
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/auth/login` | Login (returns JWT access and refresh tokens) |
+| POST | `/users/` | Register a new user |
+| GET | `/users/<id>` | Get user by ID |
 
-https://documenter.getpostman.com/view/57333016/2sBYApzDBC
+### Admin-Protected Routes (requires admin JWT)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/products/` | Create a product |
+| PUT | `/products/<id>` | Update a product |
+| DELETE | `/products/<id>` | Soft-delete a product |
+| POST | `/categories/` | Create a category |
+| PUT | `/categories/<id>` | Update a category |
+| DELETE | `/categories/<id>` | Soft-delete a category |
+| GET | `/orders/<id>` | View a specific order |
+| DELETE | `/orders/<id>` | Soft-delete an order |
+
+### Customer-Protected Routes (requires customer JWT)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/orders/` | Place a new order |
+| GET | `/orders/` | List own orders |
+
+---
+
+## Authentication
+
+The API uses JWT (JSON Web Tokens) for authentication. After logging in, include the access token in the `Authorization` header:
+
+```
+Authorization: Bearer <access_token>
+```
+
+- **Access token** expires in 1 hour.
+- **Refresh token** expires in 7 days.
+- User roles: `admin`, `customer`.
+
+---
+
+## Testing
+
+### Unit Tests (pytest)
+
+Tests run against an in-memory SQLite database — your PostgreSQL database is not affected.
+
+```bash
+# Run all tests
+pytest tests/ -v
+
+# Run specific test file
+pytest tests/test_auth.py -v
+
+# Run with coverage report
+pytest tests/ --cov=routes --cov-report=term-missing
+```
+
+### Load Testing (Locust)
+
+Load testing simulates concurrent users accessing the application.
+
+```bash
+# Start the Flask app first
+flask run
+
+# In another terminal, start Locust
+locust -f locustfile.py --users 200 --spawn-rate 10
+```
+
+Open `http://localhost:8089` in the browser. Set the host to `http://localhost:5000` and start the test.
+
+Two user scenarios are tested:
+- **BrowsingUser** — Public users browsing and viewing products.
+- **ShoppingUser** — Authenticated customers who login, browse, and place orders.
+
+---
+
+## Seeded Test Accounts
+
+| Name | Email | Password | Role |
+|------|-------|----------|------|
+| John Alexander | john@email.com | John1234 | admin |
+| Sarah Tan | sarah@email.com | Sarah1234 | customer |
+| Michael Max | michael@email.com | Michael1234 | customer |
+| Alonso Wirtz | alonso@email.com | Alonso1234 | customer |
+| David Alten | david@email.com | David1234 | customer |
 
 ---
 
