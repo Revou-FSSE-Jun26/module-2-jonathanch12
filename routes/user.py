@@ -8,6 +8,19 @@ import bcrypt
 user_bp = Blueprint('user', __name__, url_prefix='/users')
 
 
+# Validation function for user registration fields
+def validate_registration_data(data):
+    # Name must be a string
+    if not isinstance(data['name'], str):
+        return jsonify({"message": "Validation error", "error": "Name must be a string", "status": "error"}), 400
+
+    # Password must be 8 characters or longer
+    if len(data['password']) < 8:
+        return jsonify({"message": "Validation error", "error": "Password must be at least 8 characters", "status": "error"}), 400
+
+    return None
+
+
 # Register new user (POST)
 @user_bp.route('/', methods=['POST'])
 def register_user():
@@ -16,6 +29,12 @@ def register_user():
         for field in ['name', 'email', 'password', 'address']:
             if field not in data:
                 return jsonify({"message": "Please fill missing fields", "status": "error"}), 400
+
+        # Validate registration fields
+        validation_error = validate_registration_data(data)
+        if validation_error:
+            return validation_error
+
         user = User(
                     name=data.get('name'),
                     email=data.get('email'),
