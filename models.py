@@ -48,11 +48,23 @@ class Order(db.Model):
     products = db.relationship('Product', secondary=order_items, backref='orders')
 
     def to_dict(self):
+        # Query order_items for this order
+        items = db.session.query(order_items).filter(order_items.c.order_id == self.id).all()
+        items_list = [
+            {
+                "product_id": item.product_id,
+                "quantity": item.quantity,
+                "unit_price": float(item.unit_price)
+            }
+            for item in items
+        ]
+
         return {
             'id': self.id,
             'user_id': self.user_id,
             'total_amount': float(self.total_amount),
             'status': self.status,
+            'order_items': items_list,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 
