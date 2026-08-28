@@ -1,5 +1,6 @@
 import pytest
 import bcrypt
+from flask_jwt_extended import create_access_token
 from app import create_app, db
 from models import User
 
@@ -25,6 +26,20 @@ def app():
 def client(app):
     """Create a test client."""
     return app.test_client()
+
+
+@pytest.fixture
+def admin_token(app):
+    """Generate a JWT access token with admin role."""
+    with app.app_context():
+        return create_access_token(identity="1", additional_claims={"role": "admin"})
+
+
+@pytest.fixture
+def customer_token(app):
+    """Generate a JWT access token with customer role."""
+    with app.app_context():
+        return create_access_token(identity="2", additional_claims={"role": "customer"})
 
 
 @pytest.fixture
