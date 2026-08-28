@@ -28,7 +28,7 @@ create table orders(
 	id serial primary key,
 	user_id int not null,
 	total_amount numeric(10,2) not null,
-	status varchar(20) not null check (status in ('pending', 'processing', 'delivering', 'completed', 'cancelled')),
+	status varchar(20) not null default 'pending' check (status in ('pending', 'processing', 'delivering', 'completed', 'cancelled')),
 	created_at timestamp default current_timestamp,
 	constraint fk_order_user foreign key(user_id) references users(id) on delete restrict
 );
