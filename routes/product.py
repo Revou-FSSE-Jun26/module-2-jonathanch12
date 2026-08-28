@@ -103,6 +103,16 @@ def update_product(product_id):
         if not product or product.is_deleted:
             return jsonify({"message": "Product not found", "status": "not found"}), 404
 
+        # Validate provided fields
+        validation_data = {
+            'name': data.get('name', product.name),
+            'price': data.get('price', float(product.price)),
+            'stock': data.get('stock', product.stock)
+        }
+        validation_error = validate_product_data(validation_data)
+        if validation_error:
+            return validation_error
+
         if 'category_id' in data:
             category = Category.query.get(data['category_id'])
             if not category:
