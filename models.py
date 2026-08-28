@@ -32,9 +32,6 @@ order_items = db.Table('order_items',
 
 class Order(db.Model):
     __tablename__ = 'orders'
-    __table_args__ = (
-        db.CheckConstraint("status::text = ANY (ARRAY['pending'::character varying, 'processing'::character varying, 'delivering'::character varying, 'completed'::character varying, 'cancelled'::character varying]::text[])"),
-    )
 
     id = db.Column(db.Integer, primary_key=True, server_default=db.FetchedValue())
     user_id = db.Column(db.ForeignKey('users.id', ondelete='RESTRICT'), nullable=False)
@@ -72,10 +69,6 @@ class Order(db.Model):
 
 class Product(db.Model):
     __tablename__ = 'products'
-    __table_args__ = (
-        db.CheckConstraint('price >= 0::numeric'),
-        db.CheckConstraint('stock >= 0')
-    )
 
     id = db.Column(db.Integer, primary_key=True, server_default=db.FetchedValue())
     category_id = db.Column(db.ForeignKey('categories.id', ondelete='RESTRICT'), nullable=False)

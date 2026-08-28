@@ -6,27 +6,38 @@ from datetime import timedelta
 import os
 from dotenv import load_dotenv
 
-app = Flask(__name__)
 load_dotenv()
 
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv("DATABASE_URL")
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY")
-app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)
-app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=7)
+db = SQLAlchemy()
+jwt = JWTManager()
+migrate = Migrate()
 
-db = SQLAlchemy(app)
-jwt = JWTManager(app)
 
-migrate = Migrate(app, db)
+def create_app(config=None):
+    app = Flask(__name__)
 
-from models import User, Product, Category, Order, order_items
+    app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv("DATABASE_URL")
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY")
+    app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)
+    app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=7)
 
-from routes import main_bp, user_bp, auth_bp, product_bp, category_bp, order_bp
+    # Override with any test/custom config
+    if config:
+        app.config.update(config)
 
-app.register_blueprint(main_bp)
-app.register_blueprint(user_bp)
-app.register_blueprint(auth_bp)
-app.register_blueprint(product_bp)
-app.register_blueprint(category_bp)
-app.register_blueprint(order_bp)
+    db.init_app(app)
+    jwt.init_app(app)
+    migrate.init_app(app, db)
+
+    from models import User, Product, Category, Order, order_items
+    from routes import main_bp, user_bp, auth_bp, product_bp, category_bp, order_bp
+
+    app.register_blueprint(main_bp)
+    app.register_blueprint(user_bp)
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(product_bp)
+    app.register_blueprint(category_bp)
+    app.register_blueprint(order_bp)
+
+    return app

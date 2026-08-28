@@ -4,7 +4,7 @@ import os
 # Add parent directory to path so we can import app and models
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from app import app, db
+from app import create_app, db
 from models import User, Category, Product
 import bcrypt
 
@@ -99,5 +99,6 @@ def seed_all():
 
 
 if __name__ == '__main__':
+    app = create_app()
     with app.app_context():
         seed_all()
