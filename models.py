@@ -98,7 +98,7 @@ class User(db.Model):
     password = db.Column(db.String(255), nullable=False)
     address = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, server_default=db.FetchedValue())
-    role = db.Column(db.String(50), nullable=False, server_default='user')
+    role = db.Column(db.String(50), nullable=False, server_default='customer')
 
     def to_dict(self):
         return {
