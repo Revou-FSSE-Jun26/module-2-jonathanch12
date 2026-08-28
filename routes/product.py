@@ -1,4 +1,5 @@
 from flask import Blueprint, jsonify, request
+from flask_jwt_extended import jwt_required, get_jwt
 from app import db
 from models import Product, Category, order_items
 from sqlalchemy.exc import IntegrityError
@@ -30,9 +31,14 @@ def get_product_by_id(product_id):
         return jsonify({"message": "Failed to get product by id", "status": "error"}), 500
 
 
-# Create new product (POST)
+# Create new product (POST) - Admin only
 @product_bp.route('/', methods=['POST'])
+@jwt_required()
 def create_product():
+    claims = get_jwt()
+    if claims.get("role") != "admin":
+        return jsonify({"message": "Admin access required", "status": "error"}), 403
+
     data = request.get_json()
     try:
         for field in ['category_id', 'name', 'description', 'price', 'stock']:
@@ -59,9 +65,14 @@ def create_product():
         return jsonify({"message": "Failed to create product", "status": "error"}), 500
 
 
-# Update existing product (PUT)
+# Update existing product (PUT) - Admin only
 @product_bp.route('/<int:product_id>', methods=['PUT'])
+@jwt_required()
 def update_product(product_id):
+    claims = get_jwt()
+    if claims.get("role") != "admin":
+        return jsonify({"message": "Admin access required", "status": "error"}), 403
+
     data = request.get_json()
     try:
         product = Product.query.get(product_id)
@@ -91,9 +102,14 @@ def update_product(product_id):
         return jsonify({"message": "Failed to update product", "status": "error"}), 500
 
 
-# Delete existing product (DELETE)
+# Delete existing product (DELETE) - Admin only
 @product_bp.route('/<int:product_id>', methods=['DELETE'])
+@jwt_required()
 def delete_product(product_id):
+    claims = get_jwt()
+    if claims.get("role") != "admin":
+        return jsonify({"message": "Admin access required", "status": "error"}), 403
+
     try:
         product = Product.query.get(product_id)
         if not product:
