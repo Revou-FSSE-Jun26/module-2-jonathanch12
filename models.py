@@ -72,6 +72,8 @@ class Product(db.Model):
     price = db.Column(db.Numeric(10, 2), nullable=False)
     stock = db.Column(db.Integer, nullable=False)
     created_at = db.Column(db.DateTime, server_default=db.FetchedValue())
+    is_deleted = db.Column(db.Boolean, nullable=False, server_default=db.text('false'))
+    deleted_at = db.Column(db.DateTime, nullable=True)
 
     category = db.relationship('Category', primaryjoin='Product.category_id == Category.id', backref='products')
 

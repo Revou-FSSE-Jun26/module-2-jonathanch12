@@ -2,7 +2,6 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt
 from app import db
 from models import Product, Category, order_items
-from sqlalchemy.exc import IntegrityError
 
 # Product blueprint
 product_bp = Blueprint('product', __name__, url_prefix='/products')
@@ -12,7 +11,7 @@ product_bp = Blueprint('product', __name__, url_prefix='/products')
 @product_bp.route('/', methods=['GET'])
 def get_products():
     try:
-        products = Product.query.all()
+        products = Product.query.filter_by(is_deleted=False).all()
         return jsonify([product.to_dict() for product in products]), 200
     except Exception as e:
         return jsonify({"message": "Failed to get products", "status": "error"}), 500
@@ -23,10 +22,9 @@ def get_products():
 def get_product_by_id(product_id):
     try:
         product = Product.query.get(product_id)
-        if product:
-            return jsonify(product.to_dict()), 200
-        else:
+        if not product or product.is_deleted:
             return jsonify({"message": "Product not found", "status": "not found"}), 404
+        return jsonify(product.to_dict()), 200
     except Exception as e:
         return jsonify({"message": "Failed to get product by id", "status": "error"}), 500
 
@@ -76,7 +74,7 @@ def update_product(product_id):
     data = request.get_json()
     try:
         product = Product.query.get(product_id)
-        if not product:
+        if not product or product.is_deleted:
             return jsonify({"message": "Product not found", "status": "not found"}), 404
 
         if 'category_id' in data:
@@ -102,7 +100,7 @@ def update_product(product_id):
         return jsonify({"message": "Failed to update product", "status": "error"}), 500
 
 
-# Delete existing product (DELETE) - Admin only
+# Delete existing product - soft delete (DELETE) - Admin only
 @product_bp.route('/<int:product_id>', methods=['DELETE'])
 @jwt_required()
 def delete_product(product_id):
@@ -112,7 +110,7 @@ def delete_product(product_id):
 
     try:
         product = Product.query.get(product_id)
-        if not product:
+        if not product or product.is_deleted:
             return jsonify({"message": "Product not found", "status": "not found"}), 404
 
         # Check if product has active orders
@@ -120,12 +118,11 @@ def delete_product(product_id):
         if exists:
             return jsonify({"message": "Cannot delete product with active orders", "status": "error"}), 409
 
-        db.session.delete(product)
+        from datetime import datetime
+        product.is_deleted = True
+        product.deleted_at = datetime.utcnow()
         db.session.commit()
         return jsonify({"message": "Product deleted successfully", "status": "ok"}), 200
-    except IntegrityError:
-        db.session.rollback()
-        return jsonify({"message": "Cannot delete product with active orders", "status": "error"}), 409
     except Exception as e:
         db.session.rollback()
         print(f"Error deleting product: {e}")
