@@ -52,16 +52,3 @@ def register_user():
         db.session.rollback()
         print(f"Error registering user: {e}")
         return jsonify({"message": "User registration error", "status": "error"}), 500
-
-
-# Get user's data by ID (GET)
-@user_bp.route('/<int:user_id>', methods=['GET'])
-def get_user_by_id(user_id):
-    try:
-        user = User.query.get(user_id)
-        if user:
-            return jsonify({"message": "User found", "user": user.to_dict(), "status": "ok"}), 200
-        else:
-            return jsonify({"message": "User not found", "status": "ok"}), 404
-    except Exception as e:
-        return jsonify({"message": "Error getting user", "status": "error"}), 500
