@@ -1,4 +1,5 @@
 from flask import Blueprint, jsonify, request
+from flask_jwt_extended import jwt_required, get_jwt
 from app import db
 from models import Product, Category
 from sqlalchemy.exc import IntegrityError
@@ -7,9 +8,14 @@ from sqlalchemy.exc import IntegrityError
 category_bp = Blueprint('category', __name__, url_prefix='/categories')
 
 
-# Create new category (POST)
+# Create new category (POST) - Admin only
 @category_bp.route('/', methods=['POST'])
+@jwt_required()
 def create_category():
+    claims = get_jwt()
+    if claims.get("role") != "admin":
+        return jsonify({"message": "Admin access required", "status": "error"}), 403
+
     data = request.get_json()
     try:
         if 'name' not in data:
@@ -57,9 +63,14 @@ def get_category_by_id(category_id):
         return jsonify({"message": "Failed to get category", "status": "error"}), 500
 
 
-# Update category (PUT)
+# Update category (PUT) - Admin only
 @category_bp.route('/<int:category_id>', methods=['PUT'])
+@jwt_required()
 def update_category(category_id):
+    claims = get_jwt()
+    if claims.get("role") != "admin":
+        return jsonify({"message": "Admin access required", "status": "error"}), 403
+
     data = request.get_json()
     try:
         category = Category.query.get(category_id)
@@ -82,9 +93,14 @@ def update_category(category_id):
         return jsonify({"message": "Failed to update category", "status": "error"}), 500
 
 
-# Delete category - soft delete (DELETE)
+# Delete category - soft delete (DELETE) - Admin only
 @category_bp.route('/<int:category_id>', methods=['DELETE'])
+@jwt_required()
 def delete_category(category_id):
+    claims = get_jwt()
+    if claims.get("role") != "admin":
+        return jsonify({"message": "Admin access required", "status": "error"}), 403
+
     try:
         category = Category.query.get(category_id)
         if not category or category.is_deleted:
