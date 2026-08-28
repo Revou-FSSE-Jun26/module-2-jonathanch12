@@ -39,7 +39,7 @@ class Order(db.Model):
     id = db.Column(db.Integer, primary_key=True, server_default=db.FetchedValue())
     user_id = db.Column(db.ForeignKey('users.id', ondelete='RESTRICT'), nullable=False)
     total_amount = db.Column(db.Numeric(10, 2), nullable=False)
-    status = db.Column(db.String(20), nullable=False, server_default='pending')
+    status = db.Column(db.String(20), nullable=False, default='pending', server_default='pending')
     created_at = db.Column(db.DateTime, server_default=db.FetchedValue())
     is_deleted = db.Column(db.Boolean, nullable=False, server_default=db.text('false'))
     deleted_at = db.Column(db.DateTime, nullable=True)
@@ -98,7 +98,7 @@ class User(db.Model):
     password = db.Column(db.String(255), nullable=False)
     address = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, server_default=db.FetchedValue())
-    role = db.Column(db.String(50), nullable=False, server_default='customer')
+    role = db.Column(db.String(50), nullable=False, default='customer', server_default='customer')
 
     def to_dict(self):
         return {
