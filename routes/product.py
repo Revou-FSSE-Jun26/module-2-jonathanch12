@@ -7,6 +7,27 @@ from models import Product, Category, order_items
 product_bp = Blueprint('product', __name__, url_prefix='/products')
 
 
+# Validation function for product creation fields
+def validate_product_data(data):
+    # Name must be a string
+    if not isinstance(data['name'], str):
+        return jsonify({"message": "Validation error", "error": "Name must be a string", "status": "error"}), 400
+
+    # Price must be numeric (int or float) and more than 0
+    if not isinstance(data['price'], (int, float)):
+        return jsonify({"message": "Validation error", "error": "Price must be a number", "status": "error"}), 400
+    if data['price'] <= 0:
+        return jsonify({"message": "Validation error", "error": "Price must be more than 0", "status": "error"}), 400
+
+    # Stock must be integer and >= 0
+    if not isinstance(data['stock'], int):
+        return jsonify({"message": "Validation error", "error": "Stock must be an integer", "status": "error"}), 400
+    if data['stock'] < 0:
+        return jsonify({"message": "Validation error", "error": "Stock must be 0 or more", "status": "error"}), 400
+
+    return None
+
+
 # Get all products (GET)
 @product_bp.route('/', methods=['GET'])
 def get_products():
@@ -42,6 +63,11 @@ def create_product():
         for field in ['category_id', 'name', 'description', 'price', 'stock']:
             if field not in data:
                 return jsonify({"message": "Please fill missing fields", "status": "error"}), 400
+
+        # Validate product fields
+        validation_error = validate_product_data(data)
+        if validation_error:
+            return validation_error
 
         category = Category.query.get(data['category_id'])
         if not category:
