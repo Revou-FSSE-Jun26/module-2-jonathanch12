@@ -79,7 +79,7 @@ module-2-jonathanch12/
 │   ├── test_category.py                        # Category route tests
 │   ├── test_product.py                         # Product route tests
 │   └── test_order.py                           # Order route tests
-├── postman_screenshots/                        # Postman testing screenshots
+├── testing_screenshots/                        # Pytest and Locust testing screenshots
 ├── .env                                        # Environment variables (not committed)
 ├── .env.example                                # Environment variable template
 ├── .gitignore
