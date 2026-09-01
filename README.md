@@ -201,14 +201,46 @@ The app will be available at `http://127.0.0.1:5000`.
 | PUT | `/categories/<id>` | Update a category |
 | DELETE | `/categories/<id>` | Soft-delete a category |
 | GET | `/orders/<id>` | View a specific order |
-| DELETE | `/orders/<id>` | Soft-delete an order |
+| DELETE | `/orders/<id>` | Soft-delete an order (blocked if processing/delivering) |
 
 ### Customer-Protected Routes (requires customer JWT)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/orders/` | Place a new order |
-| GET | `/orders/` | List own orders |
+
+### Shared Order Routes (Customer and Admin)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/orders/` | List orders (customer: own orders only, admin: all orders) |
+| PUT | `/orders/<id>` | Update order status (admin: advance the flow; customer: cancel own pending order) |
+
+---
+
+## Order Status Workflow
+
+Orders follow a forward-only status lifecycle. The `PUT /orders/<id>` route enforces the rules below.
+
+```
+pending --> processing --> delivering --> completed
+   |            |              |
+   +------------+--------------+--------> cancelled
+```
+
+**Admin** can advance an order one step at a time and cannot revert or skip statuses:
+
+| Current status | Allowed next statuses |
+|----------------|-----------------------|
+| `pending` | `processing`, `cancelled` |
+| `processing` | `delivering`, `cancelled` |
+| `delivering` | `completed`, `cancelled` |
+| `completed` | none (terminal) |
+| `cancelled` | none (terminal) |
+
+**Customer** can only cancel their own order, and only while it is still `pending`.
+
+When an order is cancelled (by either role), the reserved product stock is automatically restored. Since the project has no payment integration, cancellation acts as the logical equivalent of a refund.
 
 ---
 
@@ -239,9 +271,22 @@ pytest tests/ -v
 # Run specific test file
 pytest tests/test_auth.py -v
 
+# Run a specific test class
+pytest tests/test_order.py::TestUpdateOrder -v
+
 # Run with coverage report
 pytest tests/ --cov=routes --cov-report=term-missing
 ```
+
+Test coverage per route file:
+
+| Test file | Covers |
+|-----------|--------|
+| `test_auth.py` | Login and JWT token generation |
+| `test_user.py` | User registration and validation |
+| `test_category.py` | Category CRUD with admin role checks |
+| `test_product.py` | Product CRUD, validation, and soft deletion |
+| `test_order.py` | Order creation, listing (customer/admin), status workflow, cancellation with restock, and soft deletion |
 
 ### Load Testing (Locust)
 
