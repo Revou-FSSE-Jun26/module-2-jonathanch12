@@ -84,17 +84,23 @@ def create_order():
         return jsonify({"message": "Failed to create order", "status": "error"}), 500
 
 
-# List all orders for a user (GET) - Customer only
+# List all orders for a user (GET) and all existing orders for admin (GET) - Customer and Admin only
 @order_bp.route('/', methods=['GET'])
 @jwt_required()
 def get_orders():
     claims = get_jwt()
-    if claims.get("role") != "customer":
-        return jsonify({"message": "Customer access required", "status": "error"}), 403
+    role = claims.get("role")
+
+    if role not in ("customer", "admin"):
+        return jsonify({"message": "Customer or admin access required", "status": "error"}), 403
 
     try:
-        current_user_id = int(get_jwt_identity())
-        orders = Order.query.filter_by(user_id=current_user_id, is_deleted=False).all()
+        if role == "customer":  # List all orders for the logged-in customer
+            current_user_id = int(get_jwt_identity())
+            orders = Order.query.filter_by(user_id=current_user_id, is_deleted=False).all()
+        else:  # role == "admin" - list all orders
+            orders = Order.query.filter_by(is_deleted=False).all()
+
         return jsonify([order.to_dict() for order in orders]), 200
     except Exception as e:
         return jsonify({"message": "Failed to get orders", "status": "error"}), 500
@@ -116,6 +122,90 @@ def get_order_by_id(order_id):
         return jsonify({"order": order.to_dict(), "status": "ok"}), 200
     except Exception as e:
         return jsonify({"message": "Failed to get order", "status": "error"}), 500
+
+
+# Update an order status (PUT) - Admin (forward-only flow) and Customer (cancel own pending order)
+VALID_STATUSES = ['pending', 'processing', 'delivering', 'completed', 'cancelled']
+
+# Allowed forward-only status transitions for admin
+ALLOWED_TRANSITIONS = {
+    'pending':    ['processing', 'cancelled'],
+    'processing': ['delivering', 'cancelled'],
+    'delivering': ['completed', 'cancelled'],
+    'completed':  [],
+    'cancelled':  [],
+}
+
+@order_bp.route('/<int:order_id>', methods=['PUT'])
+@jwt_required()
+def update_order(order_id):
+    claims = get_jwt()
+    role = claims.get("role")
+
+    if role not in ("customer", "admin"):
+        return jsonify({"message": "Customer or admin access required", "status": "error"}), 403
+
+    data = request.get_json()
+    try:
+        if 'status' not in data:
+            return jsonify({"message": "Please provide a status", "status": "error"}), 400
+
+        new_status = data['status']
+        if new_status not in VALID_STATUSES:
+            return jsonify({
+                "message": f"Invalid status. Must be one of: {', '.join(VALID_STATUSES)}",
+                "status": "error"
+            }), 400
+
+        order = Order.query.get(order_id)
+        if not order or order.is_deleted:
+            return jsonify({"message": "Order not found", "status": "not found"}), 404
+
+        # Cannot change status of an already completed or cancelled order
+        if order.status in ('completed', 'cancelled'):
+            return jsonify({
+                "message": f"Cannot update an order that is already {order.status}",
+                "status": "error"
+            }), 409
+
+        if role == "customer":
+            current_user_id = int(get_jwt_identity())
+            # Customers can only update their own orders
+            if order.user_id != current_user_id:
+                return jsonify({"message": "You can only update your own orders", "status": "error"}), 403
+
+            # Customers can only cancel
+            if new_status != "cancelled":
+                return jsonify({"message": "Customers can only cancel their orders", "status": "error"}), 403
+
+            # Customers can only cancel while the order is still pending
+            if order.status != "pending":
+                return jsonify({
+                    "message": f"Cannot cancel an order that is currently {order.status}",
+                    "status": "error"
+                }), 409
+        else:  # role == "admin" - enforce forward-only status flow
+            if new_status not in ALLOWED_TRANSITIONS[order.status]:
+                return jsonify({
+                    "message": f"Cannot change status from '{order.status}' to '{new_status}'. Allowed: {', '.join(ALLOWED_TRANSITIONS[order.status]) or 'none'}",
+                    "status": "error"
+                }), 409
+
+        # If the order is being cancelled, restock the products
+        if new_status == "cancelled":
+            items = db.session.query(order_items).filter(order_items.c.order_id == order.id).all()
+            for item in items:
+                product = Product.query.get(item.product_id)
+                if product:
+                    product.stock += item.quantity
+
+        order.status = new_status
+        db.session.commit()
+        return jsonify({"message": "Order updated successfully", "order": order.to_dict(), "status": "ok"}), 200
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error updating order: {e}")
+        return jsonify({"message": "Failed to update order", "status": "error"}), 500
 
 
 # Delete an order - soft delete (DELETE) - Admin only
