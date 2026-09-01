@@ -382,6 +382,70 @@ class TestUpdateOrder:
         assert data["message"] == "Order updated successfully"
         assert data["order"]["status"] == "processing"
 
+    def test_admin_full_forward_flow(self, app, client, admin_user, customer_user):
+        """Test admin can advance an order through the full valid flow."""
+        with app.app_context():
+            order = Order(user_id=customer_user["id"], total_amount=199000, status="pending")
+            db.session.add(order)
+            db.session.commit()
+            order_id = order.id
+
+        headers = {"Authorization": f"Bearer {admin_user['token']}"}
+
+        for expected in ["processing", "delivering", "completed"]:
+            response = client.put(f'/orders/{order_id}', json={"status": expected}, headers=headers)
+            data = response.get_json()
+            assert response.status_code == 200
+            assert data["order"]["status"] == expected
+
+    def test_admin_cannot_revert_status(self, app, client, admin_user, customer_user):
+        """Test admin cannot revert status backwards (processing -> pending)."""
+        with app.app_context():
+            order = Order(user_id=customer_user["id"], total_amount=199000, status="processing")
+            db.session.add(order)
+            db.session.commit()
+            order_id = order.id
+
+        response = client.put(f'/orders/{order_id}', json={
+            "status": "pending"
+        }, headers={"Authorization": f"Bearer {admin_user['token']}"})
+        data = response.get_json()
+
+        assert response.status_code == 409
+        assert "Cannot change status" in data["message"]
+
+    def test_admin_cannot_skip_status(self, app, client, admin_user, customer_user):
+        """Test admin cannot skip statuses (pending -> delivering)."""
+        with app.app_context():
+            order = Order(user_id=customer_user["id"], total_amount=199000, status="pending")
+            db.session.add(order)
+            db.session.commit()
+            order_id = order.id
+
+        response = client.put(f'/orders/{order_id}', json={
+            "status": "delivering"
+        }, headers={"Authorization": f"Bearer {admin_user['token']}"})
+        data = response.get_json()
+
+        assert response.status_code == 409
+        assert "Cannot change status" in data["message"]
+
+    def test_admin_can_cancel_from_delivering(self, app, client, admin_user, customer_user):
+        """Test admin can cancel an order that is in delivering status (Option A)."""
+        with app.app_context():
+            order = Order(user_id=customer_user["id"], total_amount=199000, status="delivering")
+            db.session.add(order)
+            db.session.commit()
+            order_id = order.id
+
+        response = client.put(f'/orders/{order_id}', json={
+            "status": "cancelled"
+        }, headers={"Authorization": f"Bearer {admin_user['token']}"})
+        data = response.get_json()
+
+        assert response.status_code == 200
+        assert data["order"]["status"] == "cancelled"
+
     def test_admin_cancel_restocks_products(self, app, client, admin_user, customer_user, sample_products):
         """Test cancelling an order restores product stock."""
         # Customer creates an order (reduces stock by 2)

@@ -124,8 +124,17 @@ def get_order_by_id(order_id):
         return jsonify({"message": "Failed to get order", "status": "error"}), 500
 
 
-# Update an order status (PUT) - Admin (any status) and Customer (cancel own pending order)
+# Update an order status (PUT) - Admin (forward-only flow) and Customer (cancel own pending order)
 VALID_STATUSES = ['pending', 'processing', 'delivering', 'completed', 'cancelled']
+
+# Allowed forward-only status transitions for admin
+ALLOWED_TRANSITIONS = {
+    'pending':    ['processing', 'cancelled'],
+    'processing': ['delivering', 'cancelled'],
+    'delivering': ['completed', 'cancelled'],
+    'completed':  [],
+    'cancelled':  [],
+}
 
 @order_bp.route('/<int:order_id>', methods=['PUT'])
 @jwt_required()
@@ -173,6 +182,12 @@ def update_order(order_id):
             if order.status != "pending":
                 return jsonify({
                     "message": f"Cannot cancel an order that is currently {order.status}",
+                    "status": "error"
+                }), 409
+        else:  # role == "admin" - enforce forward-only status flow
+            if new_status not in ALLOWED_TRANSITIONS[order.status]:
+                return jsonify({
+                    "message": f"Cannot change status from '{order.status}' to '{new_status}'. Allowed: {', '.join(ALLOWED_TRANSITIONS[order.status]) or 'none'}",
                     "status": "error"
                 }), 409
 
