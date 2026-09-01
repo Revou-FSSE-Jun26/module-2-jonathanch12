@@ -132,10 +132,12 @@ pip install -r requirements.txt
 
 1. Create a new PostgreSQL database.
 2. Execute `database/schema.sql` to create the tables.
-3. Mark migrations as applied:
+3. Run migrations as applied:
    ```bash
-   flask db stamp head
+   flask db upgrade
    ```
+4. Run `seed.py` from `helper` folder to populate the database with users, categories, and products data.
+5. Run `seed_order.py` from `helper` folder to populate the database with orders data.
 
 ### 5. Configure the `.env` File
 
