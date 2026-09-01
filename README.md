@@ -58,7 +58,8 @@ module-2-jonathanch12/
 │   ├── queries.sql                             # Example queries
 │   └── Schema Diagram (ERD_Screenshot_DBeaver).png
 ├── helper/
-│   └── seed.py                                 # Python database seeder (bcrypt-hashed passwords)
+│   └── seed.py                                 # Python database seeder for users, categories, and products
+│   └── seed_order.py                           # Python database seeder for orders
 ├── migrations/
 │   ├── versions/                               # Migration history
 │   ├── alembic.ini
