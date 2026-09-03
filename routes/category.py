@@ -55,7 +55,7 @@ def get_category_by_id(category_id):
         if not category or category.is_deleted:
             return jsonify({"message": "Category not found", "status": "not found"}), 404
 
-        products = Product.query.filter_by(category_id=category_id).all()
+        products = Product.query.filter_by(category_id=category_id, is_deleted=False).all()
         result = category.to_dict()
         result['products'] = [product.to_dict() for product in products]
         return jsonify(result), 200
