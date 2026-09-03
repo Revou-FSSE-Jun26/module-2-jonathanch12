@@ -329,4 +329,14 @@ Full API documentation with request/response examples:
 
 https://documenter.getpostman.com/view/57333016/2sBYApzDBC
 
+---
+
+### Deployment
+
+The deployed project is live and can be accesed at:
+
+https://revoshop-flask.vercel.app/
+
+---
+
 [![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/a/wGq_UtnU)
