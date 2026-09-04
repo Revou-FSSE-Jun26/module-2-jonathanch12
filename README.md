@@ -337,6 +337,10 @@ The deployed project is live and can be accesed at:
 
 https://revoshop-flask.vercel.app/
 
+> [!NOTE]  
+> **Live Demo Status:** The production deployment on [Vercel](https://revoshop-flask.vercel.app/) reflects the stable release at commit [`05dc237`](https://github.com/Revou-FSSE-Jun26/module-2-jonathanch12/commit/05dc2379b12fad4fcdd35ef460c33d0bf8ecab12) (v1.0.0).  
+> Recent commits on the `main` branch contain unreleased updates and work-in-progress features that are not yet deployed.
+
 ---
 
 [![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/a/wGq_UtnU)
