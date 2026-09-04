@@ -1,10 +1,10 @@
-insert into users(name, email, password, address)
+insert into users(name, email, password, address, phone)
 values
-('John Alexander', 'john@email.com', 'John123', 'Park Ave 123'),
-('Sarah Tan', 'sarah@email.com', 'Sarah123', 'Milton 1'),
-('Michael Max', 'michael@email.com', 'Michael123', 'Sora Area'),
-('Alonso Wirtz', 'alonso@email.com', 'Alonso123', 'Keynes 123'),
-('David Alten', 'david@email.com', 'David123', 'Stamford 4');
+('John Alexander', 'john@email.com', 'John123', 'Park Ave 123', '081234567899'),
+('Sarah Tan', 'sarah@email.com', 'Sarah123', 'Milton 1', '081345678912'),
+('Michael Max', 'michael@email.com', 'Michael123', 'Sora Area', '081456789123'),
+('Alonso Wirtz', 'alonso@email.com', 'Alonso123', 'Keynes 123', '081567891234'),
+('David Alten', 'david@email.com', 'David123', 'Stamford 4', '081678912345');
 
 insert into categories(name, description)
 values

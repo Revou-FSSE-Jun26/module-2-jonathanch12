@@ -15,11 +15,11 @@ def hash_password(password):
 
 def seed_users():
     users = [
-        {"name": "John Alexander", "email": "john@email.com", "password": "John1234", "address": "Park Ave 123", "role": "admin"},
-        {"name": "Sarah Tan", "email": "sarah@email.com", "password": "Sarah1234", "address": "Milton 1", "role": "customer"},
-        {"name": "Michael Max", "email": "michael@email.com", "password": "Michael1234", "address": "Sora Area", "role": "customer"},
-        {"name": "Alonso Wirtz", "email": "alonso@email.com", "password": "Alonso1234", "address": "Keynes 123", "role": "customer"},
-        {"name": "David Alten", "email": "david@email.com", "password": "David1234", "address": "Stamford 4", "role": "customer"},
+        {"name": "John Alexander", "email": "john@email.com", "password": "John1234", "address": "Park Ave 123", "role": "admin", "phone": "081234567899"},
+        {"name": "Sarah Tan", "email": "sarah@email.com", "password": "Sarah1234", "address": "Milton 1", "role": "customer", "phone": "081345678912"},
+        {"name": "Michael Max", "email": "michael@email.com", "password": "Michael1234", "address": "Sora Area", "role": "customer", "phone": "081456789123"},
+        {"name": "Alonso Wirtz", "email": "alonso@email.com", "password": "Alonso1234", "address": "Keynes 123", "role": "customer", "phone": "081567891234"},
+        {"name": "David Alten", "email": "david@email.com", "password": "David1234", "address": "Stamford 4", "role": "customer", "phone": "081678912345"},
     ]
 
     for user_data in users:
@@ -30,7 +30,8 @@ def seed_users():
                 email=user_data["email"],
                 password=hash_password(user_data["password"]),
                 address=user_data["address"],
-                role=user_data["role"]
+                role=user_data["role"],
+                phone=user_data["phone"]
             )
             db.session.add(user)
 
