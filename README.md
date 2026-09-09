@@ -85,7 +85,12 @@ module-2-jonathanch12/
 ├── .env.example                                # Environment variable template
 ├── .gitignore
 ├── app.py                                      # Flask app factory (create_app)
-├── models.py                                   # SQLAlchemy models
+├── models/                                     # SQLAlchemy models (one file per model)
+│   ├── __init__.py                             # Re-exports all models + order_items table
+│   ├── category.py                             # Category model
+│   ├── order.py                                # order_items association table + Order model
+│   ├── product.py                              # Product model
+│   └── user.py                                 # User model
 ├── locustfile.py                               # Load testing configuration
 ├── requirements.txt                            # Python dependencies
 └── README.md
