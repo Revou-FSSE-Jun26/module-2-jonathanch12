@@ -50,6 +50,7 @@ def sample_user(app):
         user = User(
             name="Test User",
             email="test@example.com",
+            phone="1234567890",
             password=hashed_password,
             address="123 Test Street",
             role="customer"
@@ -60,6 +61,7 @@ def sample_user(app):
             "id": user.id,
             "name": user.name,
             "email": user.email,
+            "phone": user.phone,
             "password": "password123",
             "role": user.role
         }

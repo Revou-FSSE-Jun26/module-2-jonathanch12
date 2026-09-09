@@ -14,6 +14,7 @@ class TestRegisterRoute:
         response = client.post('/users/', json={
             "name": "New User",
             "email": "newuser@example.com",
+            "phone": "1234567890",
             "password": "securepass123",
             "address": "456 New Street"
         })
@@ -24,6 +25,7 @@ class TestRegisterRoute:
         assert data["status"] == "ok"
         assert data["user"]["name"] == "New User"
         assert data["user"]["email"] == "newuser@example.com"
+        assert data["user"]["phone"] == "1234567890"
         assert "password" not in data["user"]
 
     def test_password_is_stored_hashed(self, app, client):
@@ -31,6 +33,7 @@ class TestRegisterRoute:
         client.post('/users/', json={
             "name": "Hash Test",
             "email": "hashtest@example.com",
+            "phone": "1234567890",
             "password": "plaintext123",
             "address": "789 Hash Ave"
         })
@@ -47,6 +50,7 @@ class TestRegisterRoute:
         # Test registration with missing name returns 400.
         response = client.post('/users/', json={
             "email": "test@example.com",
+            "phone": "1234567890",
             "password": "password123",
             "address": "123 Street"
         })
@@ -60,6 +64,21 @@ class TestRegisterRoute:
         # Test registration with missing email returns 400.
         response = client.post('/users/', json={
             "name": "Test User",
+            "phone": "1234567890",
+            "password": "password123",
+            "address": "123 Street"
+        })
+        data = response.get_json()
+
+        assert response.status_code == 400
+        assert data["message"] == "Please fill missing fields"
+        assert data["status"] == "error"
+
+    def test_register_missing_phone(self, client):
+        # Test registration with missing phone returns 400.
+        response = client.post('/users/', json={
+            "name": "Test User",
+            "email": "test@example.com",
             "password": "password123",
             "address": "123 Street"
         })
@@ -74,6 +93,7 @@ class TestRegisterRoute:
         response = client.post('/users/', json={
             "name": "Test User",
             "email": "test@example.com",
+            "phone": "1234567890",
             "address": "123 Street"
         })
         data = response.get_json()
@@ -87,6 +107,7 @@ class TestRegisterRoute:
         response = client.post('/users/', json={
             "name": "Test User",
             "email": "test@example.com",
+            "phone": "1234567890",
             "password": "password123"
         })
         data = response.get_json()
@@ -111,6 +132,7 @@ class TestRegisterRoute:
         response = client.post('/users/', json={
             "name": 12345,
             "email": "test@example.com",
+            "phone": "1234567890",
             "password": "password123",
             "address": "123 Street"
         })
@@ -120,11 +142,27 @@ class TestRegisterRoute:
         assert data["message"] == "Validation error"
         assert data["error"] == "Name must be a string"
 
+    def test_register_phone_not_string(self, client):
+        # Test registration with non-string phone returns 400.
+        response = client.post('/users/', json={
+            "name": "Test User",
+            "email": "test@example.com",
+            "phone": 1234567890,
+            "password": "password123",
+            "address": "123 Street"
+        })
+        data = response.get_json()
+
+        assert response.status_code == 400
+        assert data["message"] == "Validation error"
+        assert data["error"] == "Phone must be a string"
+
     def test_register_password_too_short(self, client):
         # Test registration with password shorter than 8 characters returns 400.
         response = client.post('/users/', json={
             "name": "Test User",
             "email": "test@example.com",
+            "phone": "1234567890",
             "password": "short",
             "address": "123 Street"
         })
@@ -141,6 +179,7 @@ class TestRegisterRoute:
         response = client.post('/users/', json={
             "name": "Another User",
             "email": sample_user["email"],
+            "phone": "1234567890",
             "password": "password123",
             "address": "999 Duplicate Ave"
         })
@@ -158,6 +197,7 @@ class TestRegisterRoute:
             response = client.post('/users/', json={
                 "name": "Error User",
                 "email": "error@example.com",
+                "phone": "1234567890",
                 "password": "password123",
                 "address": "123 Error Street"
             })

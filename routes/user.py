@@ -14,6 +14,10 @@ def validate_registration_data(data):
     if not isinstance(data['name'], str):
         return jsonify({"message": "Validation error", "error": "Name must be a string", "status": "error"}), 400
 
+    # Phone must be a string
+    if not isinstance(data['phone'], str):
+        return jsonify({"message": "Validation error", "error": "Phone must be a string", "status": "error"}), 400
+
     # Password must be 8 characters or longer
     if len(data['password']) < 8:
         return jsonify({"message": "Validation error", "error": "Password must be at least 8 characters", "status": "error"}), 400
@@ -26,7 +30,7 @@ def validate_registration_data(data):
 def register_user():
     data = request.get_json()
     try:
-        for field in ['name', 'email', 'password', 'address']:
+        for field in ['name', 'email', 'phone', 'password', 'address']:
             if field not in data:
                 return jsonify({"message": "Please fill missing fields", "status": "error"}), 400
 
@@ -38,6 +42,7 @@ def register_user():
         user = User(
                     name=data.get('name'),
                     email=data.get('email'),
+                    phone=data.get('phone'),
                     password = bcrypt.hashpw(data["password"].encode("utf-8"), bcrypt.gensalt()).decode("utf-8"),
                     address = data.get('address')
                 )
