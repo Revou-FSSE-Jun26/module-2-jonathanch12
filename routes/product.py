@@ -28,7 +28,7 @@ def validate_product_data(data):
     return None
 
 
-# Get all products (GET) - supports optional ?search=<keyword>
+# Get all products (GET) - supports optional ?search=<keyword> and ?page=<n>
 @product_bp.route('/', methods=['GET'])
 def get_products():
     try:
@@ -45,8 +45,26 @@ def get_products():
                 )
             )
 
-        products = query.all()
-        return jsonify([product.to_dict() for product in products]), 200
+        # Pagination - 20 products per page
+        per_page = 20
+        page = request.args.get('page', 1, type=int)
+        if page < 1:
+            page = 1
+
+        pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+
+        return jsonify({
+            "products": [product.to_dict() for product in pagination.items],
+            "pagination": {
+                "page": pagination.page,
+                "per_page": pagination.per_page,
+                "total_items": pagination.total,
+                "total_pages": pagination.pages,
+                "has_next": pagination.has_next,
+                "has_prev": pagination.has_prev
+            },
+            "status": "ok"
+        }), 200
     except Exception as e:
         return jsonify({"message": "Failed to get products", "status": "error"}), 500
 

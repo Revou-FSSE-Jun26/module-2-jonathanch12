@@ -23,8 +23,11 @@ class TestGetProducts:
         data = response.get_json()
 
         assert response.status_code == 200
-        assert len(data) == 2
-        names = [p["name"] for p in data]
+        assert len(data["products"]) == 2
+        assert data["pagination"]["total_items"] == 2
+        assert data["pagination"]["page"] == 1
+        assert data["pagination"]["per_page"] == 20
+        names = [p["name"] for p in data["products"]]
         assert "Mouse" in names
         assert "Keyboard" in names
         assert "Deleted" not in names
@@ -35,7 +38,39 @@ class TestGetProducts:
         data = response.get_json()
 
         assert response.status_code == 200
-        assert data == []
+        assert data["products"] == []
+        assert data["pagination"]["total_items"] == 0
+        assert data["pagination"]["total_pages"] == 0
+
+    def test_pagination_second_page(self, app, client):
+        """Test pagination returns 20 per page and correct items on page 2."""
+        with app.app_context():
+            category = Category(name="Electronics", description="Gadgets")
+            db.session.add(category)
+            db.session.commit()
+
+            products = [
+                Product(category_id=category.id, name=f"Product {i:02d}",
+                        description="desc", price=10000, stock=5)
+                for i in range(25)
+            ]
+            db.session.add_all(products)
+            db.session.commit()
+
+        # Page 1 -> 20 items
+        page1 = client.get('/products/?page=1').get_json()
+        assert len(page1["products"]) == 20
+        assert page1["pagination"]["total_items"] == 25
+        assert page1["pagination"]["total_pages"] == 2
+        assert page1["pagination"]["has_next"] is True
+        assert page1["pagination"]["has_prev"] is False
+
+        # Page 2 -> remaining 5 items
+        page2 = client.get('/products/?page=2').get_json()
+        assert len(page2["products"]) == 5
+        assert page2["pagination"]["page"] == 2
+        assert page2["pagination"]["has_next"] is False
+        assert page2["pagination"]["has_prev"] is True
 
     def _seed_search_products(self, app):
         """Helper to seed products used by search filter tests."""
@@ -59,7 +94,7 @@ class TestGetProducts:
         data = response.get_json()
 
         assert response.status_code == 200
-        names = [p["name"] for p in data]
+        names = [p["name"] for p in data["products"]]
         assert names == ["Wireless Mouse"]
 
     def test_search_matches_description(self, app, client):
@@ -70,7 +105,7 @@ class TestGetProducts:
         data = response.get_json()
 
         assert response.status_code == 200
-        names = [p["name"] for p in data]
+        names = [p["name"] for p in data["products"]]
         assert names == ["Mechanical Keyboard"]
 
     def test_search_is_case_insensitive(self, app, client):
@@ -81,7 +116,7 @@ class TestGetProducts:
         data = response.get_json()
 
         assert response.status_code == 200
-        names = [p["name"] for p in data]
+        names = [p["name"] for p in data["products"]]
         assert names == ["Mechanical Keyboard"]
 
     def test_search_matches_multiple_across_fields(self, app, client):
@@ -92,7 +127,7 @@ class TestGetProducts:
         data = response.get_json()
 
         assert response.status_code == 200
-        names = sorted(p["name"] for p in data)
+        names = sorted(p["name"] for p in data["products"])
         # "Wireless Mouse" (name) and "USB Cable" (description contains "Wireless")
         assert names == ["USB Cable", "Wireless Mouse"]
 
@@ -105,7 +140,7 @@ class TestGetProducts:
         data = response.get_json()
 
         assert response.status_code == 200
-        assert data == []
+        assert data["products"] == []
 
     def test_search_no_match_returns_empty(self, app, client):
         """Test search with no matching keyword returns an empty list."""
@@ -115,7 +150,7 @@ class TestGetProducts:
         data = response.get_json()
 
         assert response.status_code == 200
-        assert data == []
+        assert data["products"] == []
 
     def test_search_empty_param_returns_all(self, app, client):
         """Test an empty search param behaves like no filter (all non-deleted products)."""
@@ -126,7 +161,7 @@ class TestGetProducts:
 
         assert response.status_code == 200
         # 3 non-deleted products (the 4th is soft-deleted)
-        assert len(data) == 3
+        assert len(data["products"]) == 3
 
 
 class TestGetProductById:
