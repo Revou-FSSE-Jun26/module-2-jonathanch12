@@ -37,6 +37,97 @@ class TestGetProducts:
         assert response.status_code == 200
         assert data == []
 
+    def _seed_search_products(self, app):
+        """Helper to seed products used by search filter tests."""
+        with app.app_context():
+            category = Category(name="Electronics", description="Gadgets")
+            db.session.add(category)
+            db.session.commit()
+
+            p1 = Product(category_id=category.id, name="Wireless Mouse", description="Ergonomic pointer", price=199000, stock=50)
+            p2 = Product(category_id=category.id, name="Mechanical Keyboard", description="RGB backlit", price=799000, stock=25)
+            p3 = Product(category_id=category.id, name="USB Cable", description="Wireless charging pad", price=99000, stock=100)
+            p4 = Product(category_id=category.id, name="Wireless Headset", description="Deleted item", price=500000, stock=5, is_deleted=True)
+            db.session.add_all([p1, p2, p3, p4])
+            db.session.commit()
+
+    def test_search_matches_name(self, app, client):
+        """Test search filter matches products by name (partial, case-insensitive)."""
+        self._seed_search_products(app)
+
+        response = client.get('/products/?search=mouse')
+        data = response.get_json()
+
+        assert response.status_code == 200
+        names = [p["name"] for p in data]
+        assert names == ["Wireless Mouse"]
+
+    def test_search_matches_description(self, app, client):
+        """Test search filter also matches against description."""
+        self._seed_search_products(app)
+
+        response = client.get('/products/?search=backlit')
+        data = response.get_json()
+
+        assert response.status_code == 200
+        names = [p["name"] for p in data]
+        assert names == ["Mechanical Keyboard"]
+
+    def test_search_is_case_insensitive(self, app, client):
+        """Test search filter ignores case."""
+        self._seed_search_products(app)
+
+        response = client.get('/products/?search=KEYBOARD')
+        data = response.get_json()
+
+        assert response.status_code == 200
+        names = [p["name"] for p in data]
+        assert names == ["Mechanical Keyboard"]
+
+    def test_search_matches_multiple_across_fields(self, app, client):
+        """Test search matches multiple products across name and description."""
+        self._seed_search_products(app)
+
+        response = client.get('/products/?search=wireless')
+        data = response.get_json()
+
+        assert response.status_code == 200
+        names = sorted(p["name"] for p in data)
+        # "Wireless Mouse" (name) and "USB Cable" (description contains "Wireless")
+        assert names == ["USB Cable", "Wireless Mouse"]
+
+    def test_search_excludes_soft_deleted(self, app, client):
+        """Test search does not return soft-deleted products."""
+        self._seed_search_products(app)
+
+        # "Wireless Headset" matches the keyword but is soft-deleted
+        response = client.get('/products/?search=headset')
+        data = response.get_json()
+
+        assert response.status_code == 200
+        assert data == []
+
+    def test_search_no_match_returns_empty(self, app, client):
+        """Test search with no matching keyword returns an empty list."""
+        self._seed_search_products(app)
+
+        response = client.get('/products/?search=nonexistent')
+        data = response.get_json()
+
+        assert response.status_code == 200
+        assert data == []
+
+    def test_search_empty_param_returns_all(self, app, client):
+        """Test an empty search param behaves like no filter (all non-deleted products)."""
+        self._seed_search_products(app)
+
+        response = client.get('/products/?search=')
+        data = response.get_json()
+
+        assert response.status_code == 200
+        # 3 non-deleted products (the 4th is soft-deleted)
+        assert len(data) == 3
+
 
 class TestGetProductById:
     """Test cases for GET /products/<id> - Public"""
@@ -392,7 +483,7 @@ class TestDeleteProduct:
         """Test deleting product with active orders returns 409."""
         with app.app_context():
             from models import User
-            user = User(name="Test", email="test@test.com", password="hashed", address="123 St", role="customer")
+            user = User(name="Test", email="test@test.com", password="hashed", phone="1234567890", address="123 St", role="customer")
             db.session.add(user)
             db.session.commit()
 
