@@ -28,11 +28,24 @@ def validate_product_data(data):
     return None
 
 
-# Get all products (GET)
+# Get all products (GET) - supports optional ?search=<keyword>
 @product_bp.route('/', methods=['GET'])
 def get_products():
     try:
-        products = Product.query.filter_by(is_deleted=False).all()
+        query = Product.query.filter_by(is_deleted=False)
+
+        # Optional keyword search on name or description (case-insensitive, partial match)
+        search = request.args.get('search', '').strip()
+        if search:
+            pattern = f"%{search}%"
+            query = query.filter(
+                db.or_(
+                    Product.name.ilike(pattern),
+                    Product.description.ilike(pattern)
+                )
+            )
+
+        products = query.all()
         return jsonify([product.to_dict() for product in products]), 200
     except Exception as e:
         return jsonify({"message": "Failed to get products", "status": "error"}), 500
