@@ -226,18 +226,26 @@ def get_orders():
         return jsonify({"message": "Failed to get orders", "status": "error"}), 500
 
 
-# View a specific order (GET) - Admin only
+# View a specific order (GET) - Admin (any order) and Customer (own order only)
 @order_bp.route('/<int:order_id>', methods=['GET'])
 @jwt_required()
 def get_order_by_id(order_id):
     claims = get_jwt()
-    if claims.get("role") != "admin":
-        return jsonify({"message": "Admin access required", "status": "error"}), 403
+    role = claims.get("role")
+
+    if role not in ("customer", "admin"):
+        return jsonify({"message": "Customer or admin access required", "status": "error"}), 403
 
     try:
         order = Order.query.get(order_id)
         if not order or order.is_deleted:
             return jsonify({"message": "Order not found", "status": "not found"}), 404
+
+        # Customers may only view their own orders
+        if role == "customer":
+            current_user_id = int(get_jwt_identity())
+            if order.user_id != current_user_id:
+                return jsonify({"message": "You can only view your own orders", "status": "error"}), 403
 
         return jsonify({"order": order.to_dict(), "status": "ok"}), 200
     except Exception as e:
