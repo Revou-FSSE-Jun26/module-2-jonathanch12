@@ -8,7 +8,7 @@ from models import User, Category, Product, Order, order_items
 def customer_user(app):
     """Create a customer user and return their data and token."""
     with app.app_context():
-        user = User(name="Customer", email="customer@test.com", password="hashed", address="123 St", role="customer")
+        user = User(name="Customer", email="customer@test.com", phone="1234567890", password="hashed", address="123 St", role="customer")
         db.session.add(user)
         db.session.commit()
         token = create_access_token(identity=str(user.id), additional_claims={"role": "customer"})
@@ -19,7 +19,7 @@ def customer_user(app):
 def admin_user(app):
     """Create an admin user and return their data and token."""
     with app.app_context():
-        user = User(name="Admin", email="admin@test.com", password="hashed", address="1 Admin Rd", role="admin")
+        user = User(name="Admin", email="admin@test.com", phone="0987654321", password="hashed", address="1 Admin Rd", role="admin")
         db.session.add(user)
         db.session.commit()
         token = create_access_token(identity=str(user.id), additional_claims={"role": "admin"})
@@ -195,7 +195,15 @@ class TestCreateOrder:
 
 
 class TestGetOrders:
-    """Test cases for GET /orders/ - Customer and Admin"""
+    """Test cases for GET /orders/ - Customer and Admin
+
+    Response envelope shape:
+        {
+            "orders": [...],
+            "pagination": {page, per_page, total_items, total_pages, has_next, has_prev},
+            "status": "ok"
+        }
+    """
 
     def test_customer_gets_own_orders(self, app, client, customer_user, sample_products):
         """Test customer can get their own orders with order_items."""
@@ -209,9 +217,33 @@ class TestGetOrders:
         data = response.get_json()
 
         assert response.status_code == 200
-        assert len(data) == 1
-        assert data[0]["user_id"] == customer_user["id"]
-        assert "order_items" in data[0]
+        assert data["status"] == "ok"
+        assert len(data["orders"]) == 1
+        assert data["orders"][0]["user_id"] == customer_user["id"]
+        assert "order_items" in data["orders"][0]
+
+    def test_response_envelope_shape(self, app, client, customer_user, sample_products):
+        """Test the response contains orders, pagination metadata, and status."""
+        client.post('/orders/', json={
+            "order_items": [{"product_id": sample_products[0]["id"], "quantity": 1}]
+        }, headers={"Authorization": f"Bearer {customer_user['token']}"})
+
+        response = client.get('/orders/',
+            headers={"Authorization": f"Bearer {customer_user['token']}"})
+        data = response.get_json()
+
+        assert response.status_code == 200
+        assert "orders" in data
+        assert "pagination" in data
+        assert data["status"] == "ok"
+
+        pagination = data["pagination"]
+        assert pagination["page"] == 1
+        assert pagination["per_page"] == 20
+        assert pagination["total_items"] == 1
+        assert pagination["total_pages"] == 1
+        assert pagination["has_next"] is False
+        assert pagination["has_prev"] is False
 
     def test_customer_only_sees_own_orders(self, app, client, customer_user, admin_user):
         """Test customer sees only their own orders, not other users' orders."""
@@ -226,8 +258,8 @@ class TestGetOrders:
         data = response.get_json()
 
         assert response.status_code == 200
-        assert len(data) == 1
-        assert data[0]["user_id"] == customer_user["id"]
+        assert len(data["orders"]) == 1
+        assert data["orders"][0]["user_id"] == customer_user["id"]
 
     def test_admin_gets_all_orders(self, app, client, customer_user, admin_user):
         """Test admin can view orders from all customers."""
@@ -242,7 +274,8 @@ class TestGetOrders:
         data = response.get_json()
 
         assert response.status_code == 200
-        assert len(data) == 2
+        assert len(data["orders"]) == 2
+        assert data["pagination"]["total_items"] == 2
 
     def test_get_orders_excludes_deleted(self, app, client, customer_user):
         """Test get orders returns only non-deleted orders."""
@@ -256,7 +289,7 @@ class TestGetOrders:
         data = response.get_json()
 
         assert response.status_code == 200
-        assert len(data) == 0
+        assert len(data["orders"]) == 0
 
     def test_admin_get_orders_excludes_deleted(self, app, client, customer_user, admin_user):
         """Test admin get orders also excludes soft-deleted orders."""
@@ -271,16 +304,18 @@ class TestGetOrders:
         data = response.get_json()
 
         assert response.status_code == 200
-        assert len(data) == 1
+        assert len(data["orders"]) == 1
 
     def test_get_orders_empty(self, client, customer_user):
-        """Test customer with no orders gets empty list."""
+        """Test customer with no orders gets empty list in the envelope."""
         response = client.get('/orders/',
             headers={"Authorization": f"Bearer {customer_user['token']}"})
         data = response.get_json()
 
         assert response.status_code == 200
-        assert data == []
+        assert data["orders"] == []
+        assert data["pagination"]["total_items"] == 0
+        assert data["pagination"]["total_pages"] == 0
 
     def test_get_orders_no_token(self, client):
         """Test getting orders without token returns 401."""
@@ -299,6 +334,256 @@ class TestGetOrders:
 
         assert response.status_code == 403
         assert data["message"] == "Customer or admin access required"
+
+    # ==================== Pagination ====================
+
+    def test_pagination_caps_at_20_per_page(self, app, client, customer_user):
+        """Test the first page returns at most 20 orders when more exist."""
+        with app.app_context():
+            orders = [
+                Order(user_id=customer_user["id"], total_amount=100000 + i, status="pending")
+                for i in range(25)
+            ]
+            db.session.add_all(orders)
+            db.session.commit()
+
+        response = client.get('/orders/',
+            headers={"Authorization": f"Bearer {customer_user['token']}"})
+        data = response.get_json()
+
+        assert response.status_code == 200
+        assert len(data["orders"]) == 20
+        assert data["pagination"]["total_items"] == 25
+        assert data["pagination"]["total_pages"] == 2
+        assert data["pagination"]["has_next"] is True
+        assert data["pagination"]["has_prev"] is False
+
+    def test_pagination_second_page(self, app, client, customer_user):
+        """Test the second page returns the remaining orders."""
+        with app.app_context():
+            orders = [
+                Order(user_id=customer_user["id"], total_amount=100000 + i, status="pending")
+                for i in range(25)
+            ]
+            db.session.add_all(orders)
+            db.session.commit()
+
+        response = client.get('/orders/?page=2',
+            headers={"Authorization": f"Bearer {customer_user['token']}"})
+        data = response.get_json()
+
+        assert response.status_code == 200
+        assert len(data["orders"]) == 5
+        assert data["pagination"]["page"] == 2
+        assert data["pagination"]["has_next"] is False
+        assert data["pagination"]["has_prev"] is True
+
+    def test_pagination_page_beyond_last_returns_empty(self, app, client, customer_user, sample_products):
+        """Test a page past the last page returns an empty list with 200."""
+        client.post('/orders/', json={
+            "order_items": [{"product_id": sample_products[0]["id"], "quantity": 1}]
+        }, headers={"Authorization": f"Bearer {customer_user['token']}"})
+
+        response = client.get('/orders/?page=99',
+            headers={"Authorization": f"Bearer {customer_user['token']}"})
+        data = response.get_json()
+
+        assert response.status_code == 200
+        assert data["orders"] == []
+
+    def test_pagination_invalid_page_non_integer(self, client, customer_user):
+        """Test a non-integer page returns 400."""
+        response = client.get('/orders/?page=abc',
+            headers={"Authorization": f"Bearer {customer_user['token']}"})
+        data = response.get_json()
+
+        assert response.status_code == 400
+        assert data["message"] == "page must be an integer"
+
+    def test_pagination_invalid_page_too_low(self, client, customer_user):
+        """Test page < 1 returns 400."""
+        response = client.get('/orders/?page=0',
+            headers={"Authorization": f"Bearer {customer_user['token']}"})
+        data = response.get_json()
+
+        assert response.status_code == 400
+        assert data["message"] == "page must be a positive integer"
+
+    # ==================== status filter ====================
+
+    def test_filter_by_status(self, app, client, customer_user):
+        """Test filtering orders by status."""
+        with app.app_context():
+            db.session.add_all([
+                Order(user_id=customer_user["id"], total_amount=100000, status="pending"),
+                Order(user_id=customer_user["id"], total_amount=200000, status="completed"),
+            ])
+            db.session.commit()
+
+        response = client.get('/orders/?status=completed',
+            headers={"Authorization": f"Bearer {customer_user['token']}"})
+        data = response.get_json()
+
+        assert response.status_code == 200
+        assert len(data["orders"]) == 1
+        assert data["orders"][0]["status"] == "completed"
+
+    def test_filter_by_invalid_status(self, client, customer_user):
+        """Test an invalid status value returns 400."""
+        response = client.get('/orders/?status=flying',
+            headers={"Authorization": f"Bearer {customer_user['token']}"})
+        data = response.get_json()
+
+        assert response.status_code == 400
+        assert "Invalid status" in data["message"]
+
+    # ==================== user_id filter ====================
+
+    def test_admin_filter_by_user_id(self, app, client, customer_user, admin_user):
+        """Test admin can filter orders by a specific user_id."""
+        with app.app_context():
+            db.session.add_all([
+                Order(user_id=customer_user["id"], total_amount=100000, status="pending"),
+                Order(user_id=admin_user["id"], total_amount=200000, status="pending"),
+            ])
+            db.session.commit()
+
+        response = client.get(f'/orders/?user_id={customer_user["id"]}',
+            headers={"Authorization": f"Bearer {admin_user['token']}"})
+        data = response.get_json()
+
+        assert response.status_code == 200
+        assert len(data["orders"]) == 1
+        assert data["orders"][0]["user_id"] == customer_user["id"]
+
+    def test_admin_filter_by_invalid_user_id(self, client, admin_user):
+        """Test a non-integer user_id returns 400 for admin."""
+        response = client.get('/orders/?user_id=abc',
+            headers={"Authorization": f"Bearer {admin_user['token']}"})
+        data = response.get_json()
+
+        assert response.status_code == 400
+        assert data["message"] == "user_id must be an integer"
+
+    def test_customer_cannot_use_user_id_filter(self, client, customer_user):
+        """Test a customer passing user_id gets 403."""
+        response = client.get('/orders/?user_id=999',
+            headers={"Authorization": f"Bearer {customer_user['token']}"})
+        data = response.get_json()
+
+        assert response.status_code == 403
+        assert data["message"] == "The user_id filter is only available to admins"
+
+    # ==================== amount range filter ====================
+
+    def test_filter_by_amount_range(self, app, client, customer_user):
+        """Test filtering orders by a total_amount range."""
+        with app.app_context():
+            db.session.add_all([
+                Order(user_id=customer_user["id"], total_amount=50000, status="pending"),
+                Order(user_id=customer_user["id"], total_amount=150000, status="pending"),
+                Order(user_id=customer_user["id"], total_amount=300000, status="pending"),
+            ])
+            db.session.commit()
+
+        response = client.get('/orders/?min_amount=100000&max_amount=200000',
+            headers={"Authorization": f"Bearer {customer_user['token']}"})
+        data = response.get_json()
+
+        assert response.status_code == 200
+        assert len(data["orders"]) == 1
+        assert data["orders"][0]["total_amount"] == 150000
+
+    def test_filter_amount_non_numeric(self, client, customer_user):
+        """Test a non-numeric min_amount returns 400."""
+        response = client.get('/orders/?min_amount=cheap',
+            headers={"Authorization": f"Bearer {customer_user['token']}"})
+        data = response.get_json()
+
+        assert response.status_code == 400
+        assert data["message"] == "min_amount must be a number"
+
+    def test_filter_amount_negative(self, client, customer_user):
+        """Test a negative amount returns 400."""
+        response = client.get('/orders/?min_amount=-10',
+            headers={"Authorization": f"Bearer {customer_user['token']}"})
+        data = response.get_json()
+
+        assert response.status_code == 400
+        assert data["message"] == "min_amount cannot be negative"
+
+    def test_filter_amount_max_less_than_min(self, client, customer_user):
+        """Test max_amount less than min_amount returns 400."""
+        response = client.get('/orders/?min_amount=200&max_amount=100',
+            headers={"Authorization": f"Bearer {customer_user['token']}"})
+        data = response.get_json()
+
+        assert response.status_code == 400
+        assert data["message"] == "max_amount cannot be less than min_amount"
+
+    # ==================== date range filter ====================
+
+    def test_filter_by_date_range_inclusive(self, app, client, customer_user):
+        """Test filtering by created_at date range, both bounds inclusive."""
+        from datetime import datetime
+        with app.app_context():
+            db.session.add_all([
+                Order(user_id=customer_user["id"], total_amount=100000, status="pending",
+                      created_at=datetime(2026, 1, 1, 10, 0, 0)),
+                Order(user_id=customer_user["id"], total_amount=200000, status="pending",
+                      created_at=datetime(2026, 1, 15, 23, 30, 0)),
+                Order(user_id=customer_user["id"], total_amount=300000, status="pending",
+                      created_at=datetime(2026, 2, 1, 0, 0, 0)),
+            ])
+            db.session.commit()
+
+        # start and end inclusive: Jan 1 .. Jan 15 should match the first two
+        response = client.get('/orders/?start_date=2026-01-01&end_date=2026-01-15',
+            headers={"Authorization": f"Bearer {customer_user['token']}"})
+        data = response.get_json()
+
+        assert response.status_code == 200
+        assert len(data["orders"]) == 2
+
+    def test_filter_invalid_date_format(self, client, customer_user):
+        """Test a badly formatted start_date returns 400."""
+        response = client.get('/orders/?start_date=01-01-2026',
+            headers={"Authorization": f"Bearer {customer_user['token']}"})
+        data = response.get_json()
+
+        assert response.status_code == 400
+        assert data["message"] == "start_date must be in YYYY-MM-DD format"
+
+    # ==================== product_id filter ====================
+
+    def test_filter_by_product_id(self, app, client, customer_user, sample_products):
+        """Test filtering orders that contain a specific product."""
+        # Order containing product 0
+        client.post('/orders/', json={
+            "order_items": [{"product_id": sample_products[0]["id"], "quantity": 1}]
+        }, headers={"Authorization": f"Bearer {customer_user['token']}"})
+        # Order containing product 1
+        client.post('/orders/', json={
+            "order_items": [{"product_id": sample_products[1]["id"], "quantity": 1}]
+        }, headers={"Authorization": f"Bearer {customer_user['token']}"})
+
+        response = client.get(f'/orders/?product_id={sample_products[0]["id"]}',
+            headers={"Authorization": f"Bearer {customer_user['token']}"})
+        data = response.get_json()
+
+        assert response.status_code == 200
+        assert len(data["orders"]) == 1
+        product_ids = [item["product_id"] for item in data["orders"][0]["order_items"]]
+        assert sample_products[0]["id"] in product_ids
+
+    def test_filter_invalid_product_id(self, client, customer_user):
+        """Test a non-integer product_id returns 400."""
+        response = client.get('/orders/?product_id=abc',
+            headers={"Authorization": f"Bearer {customer_user['token']}"})
+        data = response.get_json()
+
+        assert response.status_code == 400
+        assert data["message"] == "product_id must be an integer"
 
 
 class TestGetOrderById:

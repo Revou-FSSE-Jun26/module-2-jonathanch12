@@ -1,7 +1,11 @@
+from datetime import datetime, timedelta
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt, get_jwt_identity
 from app import db
 from models import User, Order, Product, order_items
+
+# Fixed number of orders returned per page
+ORDERS_PER_PAGE = 20
 
 # Order blueprint
 order_bp = Blueprint('order', __name__, url_prefix='/orders')
@@ -94,14 +98,130 @@ def get_orders():
     if role not in ("customer", "admin"):
         return jsonify({"message": "Customer or admin access required", "status": "error"}), 403
 
-    try:
-        if role == "customer":  # List all orders for the logged-in customer
-            current_user_id = int(get_jwt_identity())
-            orders = Order.query.filter_by(user_id=current_user_id, is_deleted=False).all()
-        else:  # role == "admin" - list all orders
-            orders = Order.query.filter_by(is_deleted=False).all()
+    # Base query: never expose soft-deleted orders
+    query = Order.query.filter_by(is_deleted=False)
 
-        return jsonify([order.to_dict() for order in orders]), 200
+    # ---- Role-based user scoping ----
+    user_id_param = request.args.get("user_id")
+    if role == "customer":
+        # The user_id filter is reserved for admins only
+        if user_id_param is not None:
+            return jsonify({
+                "message": "The user_id filter is only available to admins",
+                "status": "error"
+            }), 403
+        current_user_id = int(get_jwt_identity())
+        query = query.filter(Order.user_id == current_user_id)
+    else:  # role == "admin" - may optionally filter by a specific user
+        if user_id_param is not None:
+            try:
+                user_id_value = int(user_id_param)
+            except (TypeError, ValueError):
+                return jsonify({"message": "user_id must be an integer", "status": "error"}), 400
+            query = query.filter(Order.user_id == user_id_value)
+
+    # ---- status filter ----
+    status = request.args.get("status")
+    if status is not None:
+        if status not in VALID_STATUSES:
+            return jsonify({
+                "message": f"Invalid status. Must be one of: {', '.join(VALID_STATUSES)}",
+                "status": "error"
+            }), 400
+        query = query.filter(Order.status == status)
+
+    # ---- amount range filter ----
+    min_amount_param = request.args.get("min_amount")
+    max_amount_param = request.args.get("max_amount")
+    min_amount = None
+    max_amount = None
+
+    if min_amount_param is not None:
+        try:
+            min_amount = float(min_amount_param)
+        except (TypeError, ValueError):
+            return jsonify({"message": "min_amount must be a number", "status": "error"}), 400
+        if min_amount < 0:
+            return jsonify({"message": "min_amount cannot be negative", "status": "error"}), 400
+
+    if max_amount_param is not None:
+        try:
+            max_amount = float(max_amount_param)
+        except (TypeError, ValueError):
+            return jsonify({"message": "max_amount must be a number", "status": "error"}), 400
+        if max_amount < 0:
+            return jsonify({"message": "max_amount cannot be negative", "status": "error"}), 400
+
+    if min_amount is not None and max_amount is not None and max_amount < min_amount:
+        return jsonify({
+            "message": "max_amount cannot be less than min_amount",
+            "status": "error"
+        }), 400
+
+    if min_amount is not None:
+        query = query.filter(Order.total_amount >= min_amount)
+    if max_amount is not None:
+        query = query.filter(Order.total_amount <= max_amount)
+
+    # ---- date range filter (created_at), YYYY-MM-DD, both inclusive ----
+    start_date_param = request.args.get("start_date")
+    end_date_param = request.args.get("end_date")
+
+    if start_date_param is not None:
+        try:
+            start_date = datetime.strptime(start_date_param, "%Y-%m-%d")
+        except (TypeError, ValueError):
+            return jsonify({"message": "start_date must be in YYYY-MM-DD format", "status": "error"}), 400
+        query = query.filter(Order.created_at >= start_date)
+
+    if end_date_param is not None:
+        try:
+            end_date = datetime.strptime(end_date_param, "%Y-%m-%d")
+        except (TypeError, ValueError):
+            return jsonify({"message": "end_date must be in YYYY-MM-DD format", "status": "error"}), 400
+        # Inclusive of the entire end day
+        query = query.filter(Order.created_at < end_date + timedelta(days=1))
+
+    # ---- product_id filter (orders containing the given product) ----
+    product_id_param = request.args.get("product_id")
+    if product_id_param is not None:
+        try:
+            product_id_value = int(product_id_param)
+        except (TypeError, ValueError):
+            return jsonify({"message": "product_id must be an integer", "status": "error"}), 400
+        query = query.filter(
+            Order.id.in_(
+                db.session.query(order_items.c.order_id).filter(
+                    order_items.c.product_id == product_id_value
+                )
+            )
+        )
+
+    # ---- pagination (fixed 20 items per page) ----
+    page_param = request.args.get("page", "1")
+    try:
+        page = int(page_param)
+    except (TypeError, ValueError):
+        return jsonify({"message": "page must be an integer", "status": "error"}), 400
+    if page < 1:
+        return jsonify({"message": "page must be a positive integer", "status": "error"}), 400
+
+    try:
+        query = query.order_by(Order.created_at.desc())
+        pagination = query.paginate(page=page, per_page=ORDERS_PER_PAGE, error_out=False)
+
+        return jsonify({
+            "orders": [order.to_dict() for order in pagination.items],
+            "pagination": {
+                "page": pagination.page,
+                "per_page": pagination.per_page,
+                "total_items": pagination.total,
+                "total_pages": pagination.pages,
+                "has_next": pagination.has_next,
+                "has_prev": pagination.has_prev
+            },
+            "status": "ok"
+        }), 200
     except Exception as e:
         return jsonify({"message": "Failed to get orders", "status": "error"}), 500
 
@@ -224,7 +344,6 @@ def delete_order(order_id):
         if order.status in ['delivering', 'processing']:
             return jsonify({"message": "Cannot delete order that is currently " + order.status, "status": "error"}), 409
 
-        from datetime import datetime
         order.is_deleted = True
         order.deleted_at = datetime.utcnow()
         db.session.commit()
