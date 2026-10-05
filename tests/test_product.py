@@ -72,6 +72,105 @@ class TestGetProducts:
         assert page2["pagination"]["has_next"] is False
         assert page2["pagination"]["has_prev"] is True
 
+    def test_pagination_page_below_one_clamps_to_first(self, app, client):
+        """Test page < 1 is clamped to page 1 (lenient behavior, 200)."""
+        with app.app_context():
+            category = Category(name="Electronics", description="Gadgets")
+            db.session.add(category)
+            db.session.commit()
+
+            products = [
+                Product(category_id=category.id, name=f"Product {i:02d}",
+                        description="desc", price=10000, stock=5)
+                for i in range(25)
+            ]
+            db.session.add_all(products)
+            db.session.commit()
+
+        response = client.get('/products/?page=0')
+        data = response.get_json()
+
+        assert response.status_code == 200
+        assert data["pagination"]["page"] == 1
+        assert len(data["products"]) == 20
+        assert data["pagination"]["has_prev"] is False
+
+    def test_pagination_non_integer_page_defaults_to_first(self, app, client):
+        """Test a non-integer page falls back to page 1 (Flask type=int default)."""
+        with app.app_context():
+            category = Category(name="Electronics", description="Gadgets")
+            db.session.add(category)
+            db.session.commit()
+
+            products = [
+                Product(category_id=category.id, name=f"Product {i:02d}",
+                        description="desc", price=10000, stock=5)
+                for i in range(25)
+            ]
+            db.session.add_all(products)
+            db.session.commit()
+
+        response = client.get('/products/?page=abc')
+        data = response.get_json()
+
+        assert response.status_code == 200
+        assert data["pagination"]["page"] == 1
+        assert len(data["products"]) == 20
+
+    def test_pagination_page_beyond_last_returns_empty(self, app, client):
+        """Test a page past the last page returns an empty list with 200."""
+        with app.app_context():
+            category = Category(name="Electronics", description="Gadgets")
+            db.session.add(category)
+            db.session.commit()
+
+            product = Product(category_id=category.id, name="Mouse",
+                              description="Wireless", price=199000, stock=50)
+            db.session.add(product)
+            db.session.commit()
+
+        response = client.get('/products/?page=99')
+        data = response.get_json()
+
+        assert response.status_code == 200
+        assert data["products"] == []
+        assert data["pagination"]["page"] == 99
+        assert data["pagination"]["total_items"] == 1
+
+    def test_search_combined_with_pagination(self, app, client):
+        """Test search filter and pagination work together (20 per page over filtered set)."""
+        with app.app_context():
+            category = Category(name="Electronics", description="Gadgets")
+            db.session.add(category)
+            db.session.commit()
+
+            # 25 products matching the search keyword and 5 that do not
+            matching = [
+                Product(category_id=category.id, name=f"Wireless Mouse {i:02d}",
+                        description="desc", price=10000, stock=5)
+                for i in range(25)
+            ]
+            non_matching = [
+                Product(category_id=category.id, name=f"Keyboard {i:02d}",
+                        description="desc", price=10000, stock=5)
+                for i in range(5)
+            ]
+            db.session.add_all(matching + non_matching)
+            db.session.commit()
+
+        # Page 1 of the filtered set -> 20 matching items
+        page1 = client.get('/products/?search=wireless&page=1').get_json()
+        assert len(page1["products"]) == 20
+        assert page1["pagination"]["total_items"] == 25
+        assert page1["pagination"]["total_pages"] == 2
+        assert all("Wireless Mouse" in p["name"] for p in page1["products"])
+
+        # Page 2 of the filtered set -> remaining 5 matching items
+        page2 = client.get('/products/?search=wireless&page=2').get_json()
+        assert len(page2["products"]) == 5
+        assert page2["pagination"]["page"] == 2
+        assert all("Wireless Mouse" in p["name"] for p in page2["products"])
+
     def _seed_search_products(self, app):
         """Helper to seed products used by search filter tests."""
         with app.app_context():
