@@ -587,7 +587,7 @@ class TestGetOrders:
 
 
 class TestGetOrderById:
-    """Test cases for GET /orders/<id> - Admin only"""
+    """Test cases for GET /orders/<id> - Admin (any order) and Customer (own order only)"""
 
     def test_admin_views_order(self, app, client, admin_token, customer_user):
         """Test admin can view a specific order."""
@@ -605,10 +605,51 @@ class TestGetOrderById:
         assert data["order"]["id"] == order_id
         assert data["status"] == "ok"
 
+    def test_customer_views_own_order(self, app, client, customer_user):
+        """Test customer can view the details of their own order."""
+        with app.app_context():
+            order = Order(user_id=customer_user["id"], total_amount=199000, status="pending")
+            db.session.add(order)
+            db.session.commit()
+            order_id = order.id
+
+        response = client.get(f'/orders/{order_id}',
+            headers={"Authorization": f"Bearer {customer_user['token']}"})
+        data = response.get_json()
+
+        assert response.status_code == 200
+        assert data["order"]["id"] == order_id
+        assert data["order"]["user_id"] == customer_user["id"]
+        assert data["status"] == "ok"
+
+    def test_customer_cannot_view_other_users_order(self, app, client, customer_user, admin_user):
+        """Test customer cannot view another user's order (403)."""
+        with app.app_context():
+            order = Order(user_id=admin_user["id"], total_amount=199000, status="pending")
+            db.session.add(order)
+            db.session.commit()
+            order_id = order.id
+
+        response = client.get(f'/orders/{order_id}',
+            headers={"Authorization": f"Bearer {customer_user['token']}"})
+        data = response.get_json()
+
+        assert response.status_code == 403
+        assert data["message"] == "You can only view your own orders"
+
     def test_get_order_not_found(self, client, admin_token):
         """Test getting non-existent order returns 404."""
         response = client.get('/orders/999',
             headers={"Authorization": f"Bearer {admin_token}"})
+        data = response.get_json()
+
+        assert response.status_code == 404
+        assert data["message"] == "Order not found"
+
+    def test_customer_get_nonexistent_order_not_found(self, client, customer_user):
+        """Test a customer requesting a non-existent order gets 404."""
+        response = client.get('/orders/999',
+            headers={"Authorization": f"Bearer {customer_user['token']}"})
         data = response.get_json()
 
         assert response.status_code == 404
@@ -629,20 +670,42 @@ class TestGetOrderById:
         assert response.status_code == 404
         assert data["message"] == "Order not found"
 
+    def test_customer_get_own_soft_deleted_order_not_found(self, app, client, customer_user):
+        """Test a customer gets 404 for their own soft-deleted order."""
+        with app.app_context():
+            order = Order(user_id=customer_user["id"], total_amount=199000, status="pending", is_deleted=True)
+            db.session.add(order)
+            db.session.commit()
+            order_id = order.id
+
+        response = client.get(f'/orders/{order_id}',
+            headers={"Authorization": f"Bearer {customer_user['token']}"})
+        data = response.get_json()
+
+        assert response.status_code == 404
+        assert data["message"] == "Order not found"
+
     def test_get_order_no_token(self, client):
         """Test getting order without token returns 401."""
         response = client.get('/orders/1')
 
         assert response.status_code == 401
 
-    def test_get_order_non_admin(self, client, customer_token):
-        """Test getting order with customer token returns 403."""
-        response = client.get('/orders/1',
-            headers={"Authorization": f"Bearer {customer_token}"})
+    def test_get_order_unknown_role(self, app, client, customer_user):
+        """Test getting order with an unknown role returns 403."""
+        with app.app_context():
+            order = Order(user_id=customer_user["id"], total_amount=199000, status="pending")
+            db.session.add(order)
+            db.session.commit()
+            order_id = order.id
+            token = create_access_token(identity="99", additional_claims={"role": "guest"})
+
+        response = client.get(f'/orders/{order_id}',
+            headers={"Authorization": f"Bearer {token}"})
         data = response.get_json()
 
         assert response.status_code == 403
-        assert data["message"] == "Admin access required"
+        assert data["message"] == "Customer or admin access required"
 
 
 class TestUpdateOrder:
