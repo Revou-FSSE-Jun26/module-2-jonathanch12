@@ -24,5 +24,6 @@ class Product(db.Model):
             'description': self.description,
             'price': self.price,
             'stock': self.stock,
+            'images': [img.to_dict() for img in self.images.filter_by(is_deleted=False).all()],
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
