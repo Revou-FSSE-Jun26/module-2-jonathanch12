@@ -92,7 +92,8 @@ module-2-jonathanch12/
 │   ├── product.py                              # Product model
 │   └── user.py                                 # User model
 ├── locustfile.py                               # Load testing configuration
-├── requirements.txt                            # Python dependencies
+├── requirements.txt                            # Python dependencies (For deployment)
+├── requirements-localdev.txt                   # Python dependencies (For local development)
 └── README.md
 ```
 
