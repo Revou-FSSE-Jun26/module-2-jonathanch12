@@ -29,6 +29,7 @@ Jinja2==3.1.6
 locust==2.46.4
 Mako==1.4.1
 MarkupSafe==3.0.3
+midtransclient==1.4.2
 more-itertools==11.1.0
 msgpack==1.2.2
 packaging==26.3

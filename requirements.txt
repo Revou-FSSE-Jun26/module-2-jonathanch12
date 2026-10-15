@@ -6,3 +6,4 @@ psycopg2-binary==2.9.12
 python-dotenv==1.2.2
 Flask-Cors==6.0.5
 bcrypt==5.0.0
+midtransclient==1.4.2
