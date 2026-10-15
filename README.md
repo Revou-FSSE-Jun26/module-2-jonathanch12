@@ -132,7 +132,7 @@ python -m venv venv
 ### 3. Install Dependencies
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements-localdev.txt
 ```
 
 ### 4. Set Up the Database
