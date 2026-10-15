@@ -1,15 +1,16 @@
 # RevoShop — A Simple e-Commerce Backend [IN DEVELOPMENT]
 
-RevoShop is a backend API for an online retail store, built with Flask and PostgreSQL. It provides RESTful endpoints for managing users, products, categories, and orders, with JWT-based authentication and role-based access control (admin/customer).
+RevoShop is a backend API for an online retail store, built with Flask and PostgreSQL. It provides RESTful endpoints for managing users, products, product images, categories, orders, and payments, with JWT-based authentication and role-based access control (admin/customer). Payments are processed through the Midtrans payment gateway.
 
 ---
 
 ## Project Goals
 
 - Build a Flask application using the application factory pattern, connected to PostgreSQL via SQLAlchemy.
-- Define models that mirror the database schema (users, products, categories, orders, order_items).
+- Define models that mirror the database schema (users, products, images, categories, orders, order_items, payments).
 - Implement JWT authentication with role-based access control (admin, customer).
-- Implement CRUD routes for users, products, categories, and orders.
+- Implement CRUD routes for users, products, product images, categories, and orders.
+- Integrate the Midtrans payment gateway, with a webhook that keeps payment status in sync.
 - Support soft deletion for products, categories, and orders.
 - Manage schema changes using Flask-Migrate (Alembic).
 - Demonstrate a many-to-many relationship between orders and products through an association table.
@@ -26,6 +27,7 @@ RevoShop is a backend API for an online retail store, built with Flask and Postg
 - **Migrations:** Flask-Migrate (Alembic)
 - **Authentication:** Flask-JWT-Extended (JWT access and refresh tokens)
 - **Password Hashing:** bcrypt
+- **Payment Gateway:** Midtrans (via the `midtransclient` Python SDK)
 - **Testing:** pytest (unit tests), Locust (load/performance testing)
 
 ---
@@ -36,11 +38,13 @@ The application uses a PostgreSQL database with the following tables:
 
 | Table | Description |
 |-------|-------------|
-| `users` | Registered users (name, email, password, address, role) |
+| `users` | Registered users (name, email, phone, password, address, role) |
 | `categories` | Product categories with soft deletion (name, description, is_deleted) |
 | `products` | Products linked to a category with soft deletion (name, description, price, stock, is_deleted) |
+| `images` | Product images linked to a product with soft deletion (product_id, url, is_deleted) |
 | `orders` | Orders placed by users with soft deletion (total_amount, status, is_deleted) |
 | `order_items` | Association table linking orders to products (quantity, unit_price) |
+| `payments` | Payment attempts for an order via Midtrans (order_id, amount, method, status, transaction_id, midtrans_order_id, signature_key) |
 
 ### ERD (Entity Relationship Diagram)
 
@@ -71,15 +75,19 @@ module-2-jonathanch12/
 │   ├── user.py                                 # User registration and retrieval
 │   ├── auth.py                                 # Login (JWT token generation)
 │   ├── product.py                              # Product CRUD (admin-protected)
+│   ├── image.py                                # Product image CRUD (admin-protected writes, public reads)
 │   ├── category.py                             # Category CRUD (admin-protected)
-│   └── order.py                                # Order creation and management
+│   ├── order.py                                # Order creation and management
+│   └── payment.py                              # Payment creation, Midtrans webhook, and payment reads
 ├── tests/
 │   ├── conftest.py                             # Pytest fixtures (app, client, tokens)
 │   ├── test_auth.py                            # Login route tests
 │   ├── test_user.py                            # Registration route tests
 │   ├── test_category.py                        # Category route tests
 │   ├── test_product.py                         # Product route tests
-│   └── test_order.py                           # Order route tests
+│   ├── test_image.py                           # Product image route tests
+│   ├── test_order.py                           # Order route tests
+│   └── test_payment.py                         # Payment route tests
 ├── testing_screenshots/                        # Pytest and Locust testing screenshots
 ├── .env                                        # Environment variables (not committed)
 ├── .env.example                                # Environment variable template
@@ -90,6 +98,8 @@ module-2-jonathanch12/
 │   ├── category.py                             # Category model
 │   ├── order.py                                # order_items association table + Order model
 │   ├── product.py                              # Product model
+│   ├── image.py                                # Product image model
+│   ├── payment.py                              # Payment model
 │   └── user.py                                 # User model
 ├── locustfile.py                               # Load testing configuration
 ├── requirements.txt                            # Python dependencies (For deployment)
@@ -153,6 +163,9 @@ Create a `.env` file in the project root (see `.env.example` for reference):
 ```
 DATABASE_URL="postgresql://username:password@localhost/your_db_name"
 JWT_SECRET_KEY="your-generated-secret-key"
+MIDTRANS_SERVER_KEY="your-midtrans-server-key"
+MIDTRANS_CLIENT_KEY="your-midtrans-client-key"
+MIDTRANS_IS_PRODUCTION="false"
 ```
 
 Generate the JWT secret key:
@@ -160,6 +173,8 @@ Generate the JWT secret key:
 ```bash
 python -c "import secrets; print(secrets.token_hex(32))"
 ```
+
+The Midtrans server and client keys are available from the [Midtrans Dashboard](https://dashboard.midtrans.com/) (Settings → Access Keys). Leave `MIDTRANS_IS_PRODUCTION` as `false` to use the sandbox environment.
 
 ### 6. Seed the Database
 
@@ -188,6 +203,7 @@ The app will be available at `http://127.0.0.1:5000`.
 | GET | `/` | Health check |
 | GET | `/products/` | List all products |
 | GET | `/products/<id>` | Get product by ID |
+| GET | `/products/<product_id>/images/` | List all images for a product |
 | GET | `/categories/` | List all categories |
 | GET | `/categories/<id>` | Get category by ID (includes products) |
 
@@ -206,6 +222,9 @@ The app will be available at `http://127.0.0.1:5000`.
 | POST | `/products/` | Create a product |
 | PUT | `/products/<id>` | Update a product |
 | DELETE | `/products/<id>` | Soft-delete a product |
+| POST | `/products/<product_id>/images/` | Add one or more images to a product |
+| PUT | `/products/<product_id>/images/<image_id>` | Update a product image |
+| DELETE | `/products/<product_id>/images/<image_id>` | Soft-delete a product image |
 | POST | `/categories/` | Create a category |
 | PUT | `/categories/<id>` | Update a category |
 | DELETE | `/categories/<id>` | Soft-delete a category |
@@ -217,6 +236,7 @@ The app will be available at `http://127.0.0.1:5000`.
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/orders/` | Place a new order |
+| POST | `/payments` | Create a Midtrans payment for one of your own pending orders |
 
 ### Shared Order Routes (Customer and Admin)
 
@@ -224,6 +244,19 @@ The app will be available at `http://127.0.0.1:5000`.
 |--------|----------|-------------|
 | GET | `/orders/` | List orders (customer: own orders only, admin: all orders) |
 | PUT | `/orders/<id>` | Update order status (admin: advance the flow; customer: cancel own pending order) |
+
+### Shared Payment Routes (Customer and Admin)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/payments/<id>` | View a payment (customer: own payments only, admin: any payment) |
+| GET | `/orders/<order_id>/payments` | List all payment attempts for an order (customer: own order only, admin: any order) |
+
+### Webhook (Public — called by Midtrans)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/payments/notification` | Midtrans HTTP notification. Verified server-side; updates payment status and advances the order when paid. Not for manual use. |
 
 ---
 
@@ -249,7 +282,28 @@ pending --> processing --> delivering --> completed
 
 **Customer** can only cancel their own order, and only while it is still `pending`.
 
-When an order is cancelled (by either role), the reserved product stock is automatically restored. Since the project has no payment integration, cancellation acts as the logical equivalent of a refund.
+When an order is cancelled (by either role), the reserved product stock is automatically restored.
+
+---
+
+## Payment Flow (Midtrans)
+
+Payments are handled through the [Midtrans](https://midtrans.com/) payment gateway using the Snap API. Each order can have multiple payment attempts (a history), which supports retries after a failed, denied, or expired payment.
+
+### How it works
+
+1. **Create a payment.** A customer calls `POST /payments` with the `order_id` of one of their own `pending` orders. The payment amount is always taken from the order's `total_amount` (never from the client, to prevent tampering).
+2. **A payment row is stored** with status `pending` and a globally unique `midtrans_order_id` in the form `order-<order_id>-<payment_id>`. This per-attempt id is required because Midtrans rejects reused order ids, so it is what makes retries possible.
+3. **The response returns a Snap `token` and `redirect_url`** that the frontend uses to open the Midtrans payment page.
+4. **Midtrans calls the webhook** (`POST /payments/notification`) whenever the transaction status changes. The notification is verified server-side via the Midtrans SDK (which re-fetches the authoritative status) rather than trusting the request body. The matching payment row is then updated with the latest `status`, `method`, `transaction_id`, and `signature_key`.
+5. **The order advances automatically.** When a payment reaches a paid state (`settlement`, or `capture` with `fraud_status = accept`), a still-`pending` order is moved to `processing`. Other statuses leave the order untouched so the customer can retry.
+
+### Payment status values
+
+The `status` column stores the raw Midtrans `transaction_status` for accurate reconciliation: `pending`, `settlement`, `capture`, `deny`, `cancel`, `expire`, `refund`, `partial_refund`, `authorize`.
+
+> [!IMPORTANT]
+> Payment status is only ever updated from the Midtrans HTTP notification (or a server-side status check), never from frontend callbacks. The Midtrans server key is loaded from the environment and never exposed to clients.
 
 ---
 
@@ -295,7 +349,9 @@ Test coverage per route file:
 | `test_user.py` | User registration and validation |
 | `test_category.py` | Category CRUD with admin role checks |
 | `test_product.py` | Product CRUD, validation, and soft deletion |
+| `test_image.py` | Product image CRUD, validation, admin role checks, and soft deletion |
 | `test_order.py` | Order creation, listing (customer/admin), status workflow, cancellation with restock, and soft deletion |
+| `test_payment.py` | Payment creation (own-order enforcement), access control (public/admin/customer), reads, and the Midtrans webhook |
 
 ### Load Testing (Locust)
 
