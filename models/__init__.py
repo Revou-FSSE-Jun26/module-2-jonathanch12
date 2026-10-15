@@ -9,5 +9,6 @@ from models.order import Order, order_items
 from models.product import Product
 from models.user import User
 from models.image import Image
+from models.payment import Payment
 
-__all__ = ['Category', 'Order', 'order_items', 'Product', 'User', 'Image']
+__all__ = ['Category', 'Order', 'order_items', 'Product', 'User', 'Image', 'Payment']

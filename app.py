@@ -30,7 +30,7 @@ def create_app(config=None):
     jwt.init_app(app)
     migrate.init_app(app, db)
 
-    from models import User, Product, Category, Order, order_items, Image
+    from models import User, Product, Category, Order, order_items, Image, Payment
     from routes import main_bp, user_bp, auth_bp, product_bp, category_bp, order_bp, image_bp
 
     app.register_blueprint(main_bp)
