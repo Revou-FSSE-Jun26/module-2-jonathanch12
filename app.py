@@ -22,6 +22,11 @@ def create_app(config=None):
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)
     app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=7)
 
+    # Midtrans payment gateway configuration
+    app.config['MIDTRANS_SERVER_KEY'] = os.getenv("MIDTRANS_SERVER_KEY")
+    app.config['MIDTRANS_CLIENT_KEY'] = os.getenv("MIDTRANS_CLIENT_KEY")
+    app.config['MIDTRANS_IS_PRODUCTION'] = os.getenv("MIDTRANS_IS_PRODUCTION", "false").lower() == "true"
+
     # Override with any test/custom config
     if config:
         app.config.update(config)
@@ -31,7 +36,7 @@ def create_app(config=None):
     migrate.init_app(app, db)
 
     from models import User, Product, Category, Order, order_items, Image, Payment
-    from routes import main_bp, user_bp, auth_bp, product_bp, category_bp, order_bp, image_bp
+    from routes import main_bp, user_bp, auth_bp, product_bp, category_bp, order_bp, image_bp, payment_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(user_bp)
@@ -40,5 +45,6 @@ def create_app(config=None):
     app.register_blueprint(category_bp)
     app.register_blueprint(order_bp)
     app.register_blueprint(image_bp)
+    app.register_blueprint(payment_bp)
 
     return app
