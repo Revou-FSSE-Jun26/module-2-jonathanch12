@@ -1,6 +1,6 @@
 # RevoShop — A Simple e-Commerce Backend [IN DEVELOPMENT]
 
-RevoShop is a backend API for an online retail store, built with Flask and PostgreSQL. It provides RESTful endpoints for managing users, products, product images, categories, orders, and payments, with JWT-based authentication and role-based access control (admin/customer). Payments are processed through the Midtrans payment gateway.
+RevoShop is a backend API for an online retail store, built with Flask and PostgreSQL. It provides RESTful endpoints for managing users, products, product images, categories, orders, and payments, with JWT-based authentication and role-based access control (admin/customer). Product images are stored on Cloudinary, and payments are processed through the Midtrans payment gateway.
 
 ---
 
@@ -10,6 +10,7 @@ RevoShop is a backend API for an online retail store, built with Flask and Postg
 - Define models that mirror the database schema (users, products, images, categories, orders, order_items, payments).
 - Implement JWT authentication with role-based access control (admin, customer).
 - Implement CRUD routes for users, products, product images, categories, and orders.
+- Integrate Cloudinary for product image storage, so the database holds only the delivered image URL and its Cloudinary `public_id`.
 - Integrate the Midtrans payment gateway, with a webhook that keeps payment status in sync.
 - Support soft deletion for products, categories, and orders.
 - Manage schema changes using Flask-Migrate (Alembic).
@@ -27,6 +28,7 @@ RevoShop is a backend API for an online retail store, built with Flask and Postg
 - **Migrations:** Flask-Migrate (Alembic)
 - **Authentication:** Flask-JWT-Extended (JWT access and refresh tokens)
 - **Password Hashing:** bcrypt
+- **Image Storage:** Cloudinary (via the `cloudinary` Python SDK)
 - **Payment Gateway:** Midtrans (via the `midtransclient` Python SDK)
 - **Testing:** pytest (unit tests), Locust (load/performance testing)
 
@@ -41,7 +43,7 @@ The application uses a PostgreSQL database with the following tables:
 | `users` | Registered users (name, email, phone, password, address, role) |
 | `categories` | Product categories with soft deletion (name, description, is_deleted) |
 | `products` | Products linked to a category with soft deletion (name, description, price, stock, is_deleted) |
-| `images` | Product images linked to a product with soft deletion (product_id, url, is_deleted) |
+| `images` | Product images linked to a product with soft deletion (product_id, url, public_id, is_deleted). `url` and `public_id` reference the asset stored on Cloudinary |
 | `orders` | Orders placed by users with soft deletion (total_amount, status, is_deleted) |
 | `order_items` | Association table linking orders to products (quantity, unit_price) |
 | `payments` | Payment attempts for an order via Midtrans (order_id, amount, method, status, transaction_id, midtrans_order_id, signature_key) |
@@ -64,6 +66,7 @@ module-2-jonathanch12/
 ├── helper/
 │   └── seed.py                                 # Python database seeder for users, categories, and products
 │   └── seed_order.py                           # Python database seeder for orders
+│   └── cloudinary_service.py                   # Cloudinary upload/destroy wrapper used by the image routes
 ├── migrations/
 │   ├── versions/                               # Migration history
 │   ├── alembic.ini
@@ -75,7 +78,7 @@ module-2-jonathanch12/
 │   ├── user.py                                 # User registration and retrieval
 │   ├── auth.py                                 # Login (JWT token generation)
 │   ├── product.py                              # Product CRUD (admin-protected)
-│   ├── image.py                                # Product image CRUD (admin-protected writes, public reads)
+│   ├── image.py                                # Product image CRUD via Cloudinary (admin-protected writes, public reads)
 │   ├── category.py                             # Category CRUD (admin-protected)
 │   ├── order.py                                # Order creation and management
 │   └── payment.py                              # Payment creation, Midtrans webhook, and payment reads
@@ -116,6 +119,7 @@ module-2-jonathanch12/
 - Python 3 installed
 - PostgreSQL installed and running
 - DBeaver (or any PostgreSQL client) for database management
+- A [Cloudinary](https://cloudinary.com/) account (free tier is sufficient) for product image storage
 
 ### 1. Clone the Repository
 
@@ -166,6 +170,9 @@ JWT_SECRET_KEY="your-generated-secret-key"
 MIDTRANS_SERVER_KEY="your-midtrans-server-key"
 MIDTRANS_CLIENT_KEY="your-midtrans-client-key"
 MIDTRANS_IS_PRODUCTION="false"
+CLOUDINARY_CLOUD_NAME="your-cloudinary-cloud-name"
+CLOUDINARY_API_KEY="your-cloudinary-api-key"
+CLOUDINARY_API_SECRET="your-cloudinary-api-secret"
 ```
 
 Generate the JWT secret key:
@@ -175,6 +182,8 @@ python -c "import secrets; print(secrets.token_hex(32))"
 ```
 
 The Midtrans server and client keys are available from the [Midtrans Dashboard](https://dashboard.midtrans.com/) (Settings → Access Keys). Leave `MIDTRANS_IS_PRODUCTION` as `false` to use the sandbox environment.
+
+The Cloudinary cloud name, API key, and API secret are available from the [Cloudinary Console](https://console.cloudinary.com/) (Dashboard → Product Environment Credentials). These are required for adding, replacing, and deleting product images.
 
 ### 6. Seed the Database
 
@@ -222,9 +231,9 @@ The app will be available at `http://127.0.0.1:5000`.
 | POST | `/products/` | Create a product |
 | PUT | `/products/<id>` | Update a product |
 | DELETE | `/products/<id>` | Soft-delete a product |
-| POST | `/products/<product_id>/images/` | Add one or more images to a product |
-| PUT | `/products/<product_id>/images/<image_id>` | Update a product image |
-| DELETE | `/products/<product_id>/images/<image_id>` | Soft-delete a product image |
+| POST | `/products/<product_id>/images/` | Upload one or more images to Cloudinary and attach them to a product (accepts file uploads and/or remote URLs) |
+| PUT | `/products/<product_id>/images/<image_id>` | Replace a product image on Cloudinary (overwrites the old asset in place) |
+| DELETE | `/products/<product_id>/images/<image_id>` | Delete a product image from Cloudinary and soft-delete the record |
 | POST | `/categories/` | Create a category |
 | PUT | `/categories/<id>` | Update a category |
 | DELETE | `/categories/<id>` | Soft-delete a category |
@@ -283,6 +292,41 @@ pending --> processing --> delivering --> completed
 **Customer** can only cancel their own order, and only while it is still `pending`.
 
 When an order is cancelled (by either role), the reserved product stock is automatically restored.
+
+---
+
+## Image Storage (Cloudinary)
+
+Product images are stored on [Cloudinary](https://cloudinary.com/) rather than in the database or on the application server. The database keeps only the delivered `url` (Cloudinary `secure_url`) and the `public_id` needed to manage the asset later. The SDK is configured once in the app factory (`create_app`) from the `CLOUDINARY_*` environment variables, and the routes talk to it through a thin wrapper in `helper/cloudinary_service.py`.
+
+### How it works
+
+1. **Upload (`POST /products/<product_id>/images/`).** An admin can send either a file upload (`multipart/form-data`, field `file`, one or many) or a JSON body with a remote image URL — a single `{"url": "..."}` object or a list of them. Each source is uploaded to Cloudinary under a per-product folder (`products/<product_id>`), and only the returned `secure_url` and `public_id` are saved to the database.
+2. **Replace (`PUT /products/<product_id>/images/<image_id>`).** Accepts exactly one new file or URL. The existing Cloudinary asset is overwritten in place (the same `public_id` is reused, so the old file is replaced and the CDN cache invalidated), and the stored `url` is refreshed.
+3. **Delete (`DELETE /products/<product_id>/images/<image_id>`).** The asset is removed from Cloudinary first. Only after Cloudinary confirms the deletion is the database record soft-deleted — if the Cloudinary call fails, the whole request fails and the record is left untouched, so the database never claims an image is gone while it still lives on Cloudinary.
+
+### Request examples
+
+Upload files:
+
+```bash
+curl -X POST http://127.0.0.1:5000/products/1/images/ \
+  -H "Authorization: Bearer <admin_access_token>" \
+  -F "file=@./mouse-front.jpg" \
+  -F "file=@./mouse-side.jpg"
+```
+
+Upload by remote URL(s):
+
+```bash
+curl -X POST http://127.0.0.1:5000/products/1/images/ \
+  -H "Authorization: Bearer <admin_access_token>" \
+  -H "Content-Type: application/json" \
+  -d '[{"url": "https://example.com/mouse-front.jpg"}, {"url": "https://example.com/mouse-side.jpg"}]'
+```
+
+> [!IMPORTANT]
+> Cloudinary credentials are loaded from the environment and never exposed to clients. On failure, upload/replace return `502` and roll back the database (removing any assets uploaded earlier in the same batch), and delete returns `502` without soft-deleting, so Cloudinary and the database stay consistent.
 
 ---
 
@@ -349,7 +393,7 @@ Test coverage per route file:
 | `test_user.py` | User registration and validation |
 | `test_category.py` | Category CRUD with admin role checks |
 | `test_product.py` | Product CRUD, validation, and soft deletion |
-| `test_image.py` | Product image CRUD, validation, admin role checks, and soft deletion |
+| `test_image.py` | Product image CRUD via Cloudinary (file and URL uploads, in-place replace, delete), validation, admin role checks, soft deletion, and Cloudinary failure handling (mocked SDK) |
 | `test_order.py` | Order creation, listing (customer/admin), status workflow, cancellation with restock, and soft deletion |
 | `test_payment.py` | Payment creation (own-order enforcement), access control (public/admin/customer), reads, and the Midtrans webhook |
 
