@@ -1,6 +1,9 @@
+import io
 import pytest
+from unittest.mock import patch
 from app import db
 from models import Category, Product, Image
+from helper.cloudinary_service import CloudinaryServiceError
 
 
 @pytest.fixture
@@ -33,13 +36,48 @@ def deleted_product(app):
         return product.id
 
 
-def _add_image(app, product_id, url="img", is_deleted=False):
+def _add_image(app, product_id, url="img", public_id="products/1/img", is_deleted=False):
     """Helper to insert an image row directly and return its id."""
     with app.app_context():
-        image = Image(product_id=product_id, url=url, is_deleted=is_deleted)
+        image = Image(product_id=product_id, url=url, public_id=public_id, is_deleted=is_deleted)
         db.session.add(image)
         db.session.commit()
         return image.id
+
+
+@pytest.fixture
+def mock_upload():
+    """Patch the Cloudinary upload helper so no real upload is made.
+
+    Returns a fake (secure_url, public_id) derived from call order so multiple
+    uploads in one request get distinct values.
+    """
+    with patch("routes.image.upload_image") as mock_up:
+        calls = {"n": 0}
+
+        def _fake_upload(source, product_id, public_id=None):
+            if public_id:
+                # Replace in place: keep the same public_id, new url.
+                return (f"https://res.cloudinary.com/demo/{public_id}-v2.jpg", public_id)
+            calls["n"] += 1
+            pid = f"products/{product_id}/img{calls['n']}"
+            return (f"https://res.cloudinary.com/demo/{pid}.jpg", pid)
+
+        mock_up.side_effect = _fake_upload
+        yield mock_up
+
+
+@pytest.fixture
+def mock_destroy():
+    """Patch the Cloudinary destroy helper so no real delete is made."""
+    with patch("routes.image.destroy_image") as mock_del:
+        mock_del.return_value = None
+        yield mock_del
+
+
+def _file(name="photo.jpg", content=b"fakebytes"):
+    """Build a multipart file tuple for the test client."""
+    return (io.BytesIO(content), name)
 
 
 # =====================================================================
@@ -62,6 +100,16 @@ class TestGetProductImages:
         urls = [img["url"] for img in data["images"]]
         assert "img1" in urls
         assert "img2" in urls
+
+    def test_image_to_dict_includes_public_id(self, app, client, sample_product):
+        """Test the serialized image exposes public_id."""
+        _add_image(app, sample_product, url="img1", public_id="products/x/img1")
+
+        response = client.get(f'/products/{sample_product}/images/')
+        data = response.get_json()
+
+        assert response.status_code == 200
+        assert data["images"][0]["public_id"] == "products/x/img1"
 
     def test_get_images_excludes_soft_deleted(self, app, client, sample_product):
         """Test soft-deleted images are not returned."""
@@ -127,64 +175,88 @@ class TestGetProductImages:
 class TestAddProductImages:
     """Test cases for POST /products/<product_id>/images/ - Admin only"""
 
-    def test_admin_adds_single_image(self, client, admin_token, sample_product):
-        """Test admin can add a single image via a JSON object."""
+    def test_admin_adds_single_url_image(self, app, client, admin_token, sample_product, mock_upload):
+        """Test admin can add a single image via a JSON url, stored as the Cloudinary URL."""
         response = client.post(f'/products/{sample_product}/images/', json={
-            "url": "img"
+            "url": "https://example.com/remote.jpg"
         }, headers={"Authorization": f"Bearer {admin_token}"})
         data = response.get_json()
 
         assert response.status_code == 201
         assert data["status"] == "ok"
         assert len(data["images"]) == 1
-        assert data["images"][0]["url"] == "img"
+        # The stored url is the Cloudinary secure_url, not the client input.
+        assert data["images"][0]["url"].startswith("https://res.cloudinary.com/")
+        assert data["images"][0]["public_id"] is not None
         assert data["images"][0]["product_id"] == sample_product
+        # The remote url was handed to Cloudinary.
+        mock_upload.assert_called_once()
+        assert mock_upload.call_args.args[0] == "https://example.com/remote.jpg"
 
-    def test_admin_adds_multiple_images(self, client, admin_token, sample_product):
+    def test_admin_adds_single_file_image(self, app, client, admin_token, sample_product, mock_upload):
+        """Test admin can add a single image via a multipart file upload."""
+        response = client.post(
+            f'/products/{sample_product}/images/',
+            data={"file": _file("mouse.jpg")},
+            content_type="multipart/form-data",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        data = response.get_json()
+
+        assert response.status_code == 201
+        assert len(data["images"]) == 1
+        assert data["images"][0]["url"].startswith("https://res.cloudinary.com/")
+        assert mock_upload.call_count == 1
+
+    def test_admin_adds_multiple_file_images(self, app, client, admin_token, sample_product, mock_upload):
+        """Test admin can upload multiple files in one request."""
+        response = client.post(
+            f'/products/{sample_product}/images/',
+            data={"file": [_file("a.jpg"), _file("b.jpg"), _file("c.jpg")]},
+            content_type="multipart/form-data",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        data = response.get_json()
+
+        assert response.status_code == 201
+        assert len(data["images"]) == 3
+        assert mock_upload.call_count == 3
+
+    def test_admin_adds_multiple_url_images(self, app, client, admin_token, sample_product, mock_upload):
         """Test admin can add multiple images via a JSON list."""
         response = client.post(f'/products/{sample_product}/images/', json=[
-            {"url": "img1"},
-            {"url": "img2"},
-            {"url": "img3"}
+            {"url": "https://example.com/1.jpg"},
+            {"url": "https://example.com/2.jpg"},
+            {"url": "https://example.com/3.jpg"}
         ], headers={"Authorization": f"Bearer {admin_token}"})
         data = response.get_json()
 
         assert response.status_code == 201
         assert len(data["images"]) == 3
-        urls = [img["url"] for img in data["images"]]
-        assert urls == ["img1", "img2", "img3"]
+        assert mock_upload.call_count == 3
 
-    def test_add_image_strips_whitespace(self, client, admin_token, sample_product):
-        """Test the url value is trimmed before saving."""
-        response = client.post(f'/products/{sample_product}/images/', json={
-            "url": "  spaced  "
-        }, headers={"Authorization": f"Bearer {admin_token}"})
-        data = response.get_json()
-
-        assert response.status_code == 201
-        assert data["images"][0]["url"] == "spaced"
-
-    def test_add_image_product_not_found(self, client, admin_token):
+    def test_add_image_product_not_found(self, client, admin_token, mock_upload):
         """Test adding an image to a non-existent product returns 404."""
         response = client.post('/products/999/images/', json={
-            "url": "img"
+            "url": "https://example.com/x.jpg"
         }, headers={"Authorization": f"Bearer {admin_token}"})
         data = response.get_json()
 
         assert response.status_code == 404
         assert data["message"] == "Product not found"
+        mock_upload.assert_not_called()
 
-    def test_add_image_soft_deleted_product(self, client, admin_token, deleted_product):
+    def test_add_image_soft_deleted_product(self, client, admin_token, deleted_product, mock_upload):
         """Test adding an image to a soft-deleted product returns 404."""
         response = client.post(f'/products/{deleted_product}/images/', json={
-            "url": "img"
+            "url": "https://example.com/x.jpg"
         }, headers={"Authorization": f"Bearer {admin_token}"})
         data = response.get_json()
 
         assert response.status_code == 404
         assert data["message"] == "Product not found"
 
-    def test_add_image_empty_list(self, client, admin_token, sample_product):
+    def test_add_image_empty_list(self, client, admin_token, sample_product, mock_upload):
         """Test posting an empty list returns 400."""
         response = client.post(f'/products/{sample_product}/images/', json=[],
             headers={"Authorization": f"Bearer {admin_token}"})
@@ -193,7 +265,7 @@ class TestAddProductImages:
         assert response.status_code == 400
         assert data["message"] == "No images provided"
 
-    def test_add_image_missing_url(self, client, admin_token, sample_product):
+    def test_add_image_missing_url(self, client, admin_token, sample_product, mock_upload):
         """Test an image object without a url returns 400."""
         response = client.post(f'/products/{sample_product}/images/', json={
             "caption": "no url here"
@@ -203,7 +275,7 @@ class TestAddProductImages:
         assert response.status_code == 400
         assert "url" in data["message"]
 
-    def test_add_image_empty_url(self, client, admin_token, sample_product):
+    def test_add_image_empty_url(self, client, admin_token, sample_product, mock_upload):
         """Test a blank url string returns 400."""
         response = client.post(f'/products/{sample_product}/images/', json={
             "url": "   "
@@ -213,7 +285,7 @@ class TestAddProductImages:
         assert response.status_code == 400
         assert "url" in data["message"]
 
-    def test_add_image_url_not_string(self, client, admin_token, sample_product):
+    def test_add_image_url_not_string(self, client, admin_token, sample_product, mock_upload):
         """Test a non-string url returns 400."""
         response = client.post(f'/products/{sample_product}/images/', json={
             "url": 12345
@@ -223,23 +295,41 @@ class TestAddProductImages:
         assert response.status_code == 400
         assert "url" in data["message"]
 
-    def test_add_image_rolls_back_on_invalid_item(self, app, client, admin_token, sample_product):
-        """Test that a bad item in the list prevents all images from being saved."""
-        response = client.post(f'/products/{sample_product}/images/', json=[
-            {"url": "good"},
-            {"url": ""}
-        ], headers={"Authorization": f"Bearer {admin_token}"})
+    def test_add_image_cloudinary_failure_rolls_back(self, app, client, admin_token, sample_product):
+        """Test a Cloudinary upload failure rolls back and persists no image rows."""
+        with patch("routes.image.upload_image", side_effect=CloudinaryServiceError("boom")), \
+             patch("routes.image.destroy_image") as mock_del:
+            response = client.post(f'/products/{sample_product}/images/', json={
+                "url": "https://example.com/x.jpg"
+            }, headers={"Authorization": f"Bearer {admin_token}"})
 
-        assert response.status_code == 400
-        # No images should have been persisted since the batch failed validation
+        assert response.status_code == 502
         with app.app_context():
-            count = Image.query.filter_by(product_id=sample_product).count()
-            assert count == 0
+            assert Image.query.filter_by(product_id=sample_product).count() == 0
+
+    def test_add_image_partial_failure_cleans_up_uploaded(self, app, client, admin_token, sample_product):
+        """Test that if the 2nd upload fails, the 1st uploaded asset is cleaned up and no rows persist."""
+        with patch("routes.image.upload_image") as mock_up, \
+             patch("routes.image.destroy_image") as mock_del:
+            mock_up.side_effect = [
+                ("https://res.cloudinary.com/demo/products/p/img1.jpg", "products/p/img1"),
+                CloudinaryServiceError("second failed"),
+            ]
+            response = client.post(f'/products/{sample_product}/images/', json=[
+                {"url": "https://example.com/1.jpg"},
+                {"url": "https://example.com/2.jpg"},
+            ], headers={"Authorization": f"Bearer {admin_token}"})
+
+        assert response.status_code == 502
+        # The first (successful) upload must be destroyed to avoid orphaned assets.
+        mock_del.assert_called_once_with("products/p/img1")
+        with app.app_context():
+            assert Image.query.filter_by(product_id=sample_product).count() == 0
 
     def test_add_image_no_token(self, client, sample_product):
         """Test adding an image without a token returns 401."""
         response = client.post(f'/products/{sample_product}/images/', json={
-            "url": "img"
+            "url": "https://example.com/x.jpg"
         })
 
         assert response.status_code == 401
@@ -247,7 +337,7 @@ class TestAddProductImages:
     def test_add_image_non_admin(self, client, customer_token, sample_product):
         """Test adding an image with a customer token returns 403."""
         response = client.post(f'/products/{sample_product}/images/', json={
-            "url": "img"
+            "url": "https://example.com/x.jpg"
         }, headers={"Authorization": f"Bearer {customer_token}"})
         data = response.get_json()
 
@@ -261,76 +351,110 @@ class TestAddProductImages:
 class TestUpdateProductImage:
     """Test cases for PUT /products/<product_id>/images/<image_id> - Admin only"""
 
-    def test_admin_updates_image(self, app, client, admin_token, sample_product):
-        """Test admin can update an image's url."""
-        image_id = _add_image(app, sample_product, url="old")
+    def test_admin_updates_image_reuses_public_id(self, app, client, admin_token, sample_product, mock_upload):
+        """Test admin can replace an image; the asset is overwritten in place (same public_id)."""
+        image_id = _add_image(app, sample_product, url="old", public_id="products/1/old")
 
         response = client.put(f'/products/{sample_product}/images/{image_id}', json={
-            "url": "new"
+            "url": "https://example.com/new.jpg"
         }, headers={"Authorization": f"Bearer {admin_token}"})
         data = response.get_json()
 
         assert response.status_code == 200
         assert data["message"] == "Image updated successfully"
-        assert data["image"]["url"] == "new"
+        # Same public_id retained, url refreshed.
+        assert data["image"]["public_id"] == "products/1/old"
+        assert data["image"]["url"].endswith("products/1/old-v2.jpg")
+        # upload_image was called with the existing public_id to overwrite in place.
+        assert mock_upload.call_args.kwargs.get("public_id") == "products/1/old"
 
-    def test_update_image_strips_whitespace(self, app, client, admin_token, sample_product):
-        """Test the updated url is trimmed."""
-        image_id = _add_image(app, sample_product, url="old")
+    def test_admin_updates_image_via_file(self, app, client, admin_token, sample_product, mock_upload):
+        """Test admin can replace an image via a file upload."""
+        image_id = _add_image(app, sample_product, url="old", public_id="products/1/old")
+
+        response = client.put(
+            f'/products/{sample_product}/images/{image_id}',
+            data={"file": _file("new.jpg")},
+            content_type="multipart/form-data",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        data = response.get_json()
+
+        assert response.status_code == 200
+        assert data["image"]["public_id"] == "products/1/old"
+
+    def test_update_legacy_image_without_public_id(self, app, client, admin_token, sample_product, mock_upload):
+        """Test replacing a legacy row that has no public_id uploads fresh."""
+        image_id = _add_image(app, sample_product, url="old", public_id=None)
 
         response = client.put(f'/products/{sample_product}/images/{image_id}', json={
-            "url": "  trimmed  "
+            "url": "https://example.com/new.jpg"
         }, headers={"Authorization": f"Bearer {admin_token}"})
         data = response.get_json()
 
         assert response.status_code == 200
-        assert data["image"]["url"] == "trimmed"
+        # A new public_id is assigned since there was none to overwrite.
+        assert data["image"]["public_id"] is not None
+        assert mock_upload.call_args.kwargs.get("public_id") is None
 
-    def test_update_image_product_not_found(self, client, admin_token):
+    def test_update_image_rejects_multiple(self, app, client, admin_token, sample_product, mock_upload):
+        """Test providing more than one replacement image returns 400."""
+        image_id = _add_image(app, sample_product, url="old")
+
+        response = client.put(f'/products/{sample_product}/images/{image_id}', json=[
+            {"url": "https://example.com/a.jpg"},
+            {"url": "https://example.com/b.jpg"},
+        ], headers={"Authorization": f"Bearer {admin_token}"})
+        data = response.get_json()
+
+        assert response.status_code == 400
+        assert "exactly one" in data["message"]
+
+    def test_update_image_product_not_found(self, client, admin_token, mock_upload):
         """Test updating an image under a non-existent product returns 404."""
         response = client.put('/products/999/images/1', json={
-            "url": "new"
+            "url": "https://example.com/new.jpg"
         }, headers={"Authorization": f"Bearer {admin_token}"})
         data = response.get_json()
 
         assert response.status_code == 404
         assert data["message"] == "Product not found"
 
-    def test_update_image_soft_deleted_product(self, app, client, admin_token, deleted_product):
+    def test_update_image_soft_deleted_product(self, app, client, admin_token, deleted_product, mock_upload):
         """Test updating an image under a soft-deleted product returns 404."""
         image_id = _add_image(app, deleted_product, url="old")
 
         response = client.put(f'/products/{deleted_product}/images/{image_id}', json={
-            "url": "new"
+            "url": "https://example.com/new.jpg"
         }, headers={"Authorization": f"Bearer {admin_token}"})
         data = response.get_json()
 
         assert response.status_code == 404
         assert data["message"] == "Product not found"
 
-    def test_update_image_not_found(self, client, admin_token, sample_product):
+    def test_update_image_not_found(self, client, admin_token, sample_product, mock_upload):
         """Test updating a non-existent image returns 404."""
         response = client.put(f'/products/{sample_product}/images/999', json={
-            "url": "new"
+            "url": "https://example.com/new.jpg"
         }, headers={"Authorization": f"Bearer {admin_token}"})
         data = response.get_json()
 
         assert response.status_code == 404
         assert data["message"] == "Image not found"
 
-    def test_update_soft_deleted_image(self, app, client, admin_token, sample_product):
+    def test_update_soft_deleted_image(self, app, client, admin_token, sample_product, mock_upload):
         """Test updating a soft-deleted image returns 404."""
         image_id = _add_image(app, sample_product, url="gone", is_deleted=True)
 
         response = client.put(f'/products/{sample_product}/images/{image_id}', json={
-            "url": "new"
+            "url": "https://example.com/new.jpg"
         }, headers={"Authorization": f"Bearer {admin_token}"})
         data = response.get_json()
 
         assert response.status_code == 404
         assert data["message"] == "Image not found"
 
-    def test_update_image_belongs_to_other_product(self, app, client, admin_token, sample_product):
+    def test_update_image_belongs_to_other_product(self, app, client, admin_token, sample_product, mock_upload):
         """Test updating an image that belongs to another product returns 404."""
         with app.app_context():
             cat = Category.query.first()
@@ -341,14 +465,14 @@ class TestUpdateProductImage:
         image_id = _add_image(app, other_id, url="belongs-to-other")
 
         response = client.put(f'/products/{sample_product}/images/{image_id}', json={
-            "url": "new"
+            "url": "https://example.com/new.jpg"
         }, headers={"Authorization": f"Bearer {admin_token}"})
         data = response.get_json()
 
         assert response.status_code == 404
         assert data["message"] == "Image not found"
 
-    def test_update_image_empty_url(self, app, client, admin_token, sample_product):
+    def test_update_image_empty_url(self, app, client, admin_token, sample_product, mock_upload):
         """Test updating with a blank url returns 400."""
         image_id = _add_image(app, sample_product, url="old")
 
@@ -360,24 +484,38 @@ class TestUpdateProductImage:
         assert response.status_code == 400
         assert "url" in data["message"]
 
-    def test_update_image_url_not_string(self, app, client, admin_token, sample_product):
-        """Test updating with a non-string url returns 400."""
+    def test_update_image_no_input(self, app, client, admin_token, sample_product, mock_upload):
+        """Test updating with an empty object (no file, no url) returns 400."""
         image_id = _add_image(app, sample_product, url="old")
 
-        response = client.put(f'/products/{sample_product}/images/{image_id}', json={
-            "url": 12345
-        }, headers={"Authorization": f"Bearer {admin_token}"})
+        response = client.put(f'/products/{sample_product}/images/{image_id}', json={},
+            headers={"Authorization": f"Bearer {admin_token}"})
         data = response.get_json()
 
         assert response.status_code == 400
         assert "url" in data["message"]
+
+    def test_update_image_cloudinary_failure(self, app, client, admin_token, sample_product):
+        """Test a Cloudinary failure during update returns 502 and keeps the old row unchanged."""
+        image_id = _add_image(app, sample_product, url="old", public_id="products/1/old")
+
+        with patch("routes.image.upload_image", side_effect=CloudinaryServiceError("boom")):
+            response = client.put(f'/products/{sample_product}/images/{image_id}', json={
+                "url": "https://example.com/new.jpg"
+            }, headers={"Authorization": f"Bearer {admin_token}"})
+
+        assert response.status_code == 502
+        with app.app_context():
+            image = Image.query.get(image_id)
+            assert image.url == "old"
+            assert image.public_id == "products/1/old"
 
     def test_update_image_no_token(self, app, client, sample_product):
         """Test updating an image without a token returns 401."""
         image_id = _add_image(app, sample_product, url="old")
 
         response = client.put(f'/products/{sample_product}/images/{image_id}', json={
-            "url": "new"
+            "url": "https://example.com/new.jpg"
         })
 
         assert response.status_code == 401
@@ -387,7 +525,7 @@ class TestUpdateProductImage:
         image_id = _add_image(app, sample_product, url="old")
 
         response = client.put(f'/products/{sample_product}/images/{image_id}', json={
-            "url": "new"
+            "url": "https://example.com/new.jpg"
         }, headers={"Authorization": f"Bearer {customer_token}"})
         data = response.get_json()
 
@@ -401,9 +539,9 @@ class TestUpdateProductImage:
 class TestDeleteProductImage:
     """Test cases for DELETE /products/<product_id>/images/<image_id> - Admin only"""
 
-    def test_admin_deletes_image(self, app, client, admin_token, sample_product):
-        """Test admin can soft-delete an image."""
-        image_id = _add_image(app, sample_product, url="img")
+    def test_admin_deletes_image(self, app, client, admin_token, sample_product, mock_destroy):
+        """Test admin can soft-delete an image and the Cloudinary asset is destroyed."""
+        image_id = _add_image(app, sample_product, url="img", public_id="products/1/img")
 
         response = client.delete(f'/products/{sample_product}/images/{image_id}',
             headers={"Authorization": f"Bearer {admin_token}"})
@@ -411,6 +549,7 @@ class TestDeleteProductImage:
 
         assert response.status_code == 200
         assert data["message"] == "Image deleted successfully"
+        mock_destroy.assert_called_once_with("products/1/img")
 
         # Confirm it is soft-deleted, not hard-deleted
         with app.app_context():
@@ -419,9 +558,37 @@ class TestDeleteProductImage:
             assert image.is_deleted is True
             assert image.deleted_at is not None
 
-    def test_deleted_image_excluded_from_listing(self, app, client, admin_token, sample_product):
+    def test_delete_cloudinary_failure_fails_request(self, app, client, admin_token, sample_product):
+        """Test a Cloudinary destroy failure fails the whole request and leaves the row intact."""
+        image_id = _add_image(app, sample_product, url="img", public_id="products/1/img")
+
+        with patch("routes.image.destroy_image", side_effect=CloudinaryServiceError("boom")):
+            response = client.delete(f'/products/{sample_product}/images/{image_id}',
+                headers={"Authorization": f"Bearer {admin_token}"})
+        data = response.get_json()
+
+        assert response.status_code == 502
+        # The row must NOT be soft-deleted when Cloudinary fails.
+        with app.app_context():
+            image = Image.query.get(image_id)
+            assert image.is_deleted is False
+            assert image.deleted_at is None
+
+    def test_delete_legacy_image_without_public_id(self, app, client, admin_token, sample_product, mock_destroy):
+        """Test deleting a legacy row with no public_id skips Cloudinary and soft-deletes."""
+        image_id = _add_image(app, sample_product, url="img", public_id=None)
+
+        response = client.delete(f'/products/{sample_product}/images/{image_id}',
+            headers={"Authorization": f"Bearer {admin_token}"})
+
+        assert response.status_code == 200
+        mock_destroy.assert_not_called()
+        with app.app_context():
+            assert Image.query.get(image_id).is_deleted is True
+
+    def test_deleted_image_excluded_from_listing(self, app, client, admin_token, sample_product, mock_destroy):
         """Test a deleted image no longer appears in the GET listing."""
-        image_id = _add_image(app, sample_product, url="img")
+        image_id = _add_image(app, sample_product, url="img", public_id="products/1/img")
         client.delete(f'/products/{sample_product}/images/{image_id}',
             headers={"Authorization": f"Bearer {admin_token}"})
 
@@ -431,7 +598,7 @@ class TestDeleteProductImage:
         assert response.status_code == 200
         assert data["images"] == []
 
-    def test_delete_image_product_not_found(self, client, admin_token):
+    def test_delete_image_product_not_found(self, client, admin_token, mock_destroy):
         """Test deleting an image under a non-existent product returns 404."""
         response = client.delete('/products/999/images/1',
             headers={"Authorization": f"Bearer {admin_token}"})
@@ -440,7 +607,7 @@ class TestDeleteProductImage:
         assert response.status_code == 404
         assert data["message"] == "Product not found"
 
-    def test_delete_image_soft_deleted_product(self, app, client, admin_token, deleted_product):
+    def test_delete_image_soft_deleted_product(self, app, client, admin_token, deleted_product, mock_destroy):
         """Test deleting an image under a soft-deleted product returns 404."""
         image_id = _add_image(app, deleted_product, url="img")
 
@@ -451,7 +618,7 @@ class TestDeleteProductImage:
         assert response.status_code == 404
         assert data["message"] == "Product not found"
 
-    def test_delete_image_not_found(self, client, admin_token, sample_product):
+    def test_delete_image_not_found(self, client, admin_token, sample_product, mock_destroy):
         """Test deleting a non-existent image returns 404."""
         response = client.delete(f'/products/{sample_product}/images/999',
             headers={"Authorization": f"Bearer {admin_token}"})
@@ -460,7 +627,7 @@ class TestDeleteProductImage:
         assert response.status_code == 404
         assert data["message"] == "Image not found"
 
-    def test_delete_already_deleted_image(self, app, client, admin_token, sample_product):
+    def test_delete_already_deleted_image(self, app, client, admin_token, sample_product, mock_destroy):
         """Test deleting an already soft-deleted image returns 404."""
         image_id = _add_image(app, sample_product, url="gone", is_deleted=True)
 
