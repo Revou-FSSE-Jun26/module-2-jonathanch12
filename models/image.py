@@ -8,6 +8,7 @@ class Image(db.Model):
     id = db.Column(db.Integer, primary_key=True, server_default=db.FetchedValue())
     product_id = db.Column(db.ForeignKey('products.id', ondelete='RESTRICT'), nullable=False)
     url = db.Column(db.String(255), nullable=False)
+    public_id = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime, server_default=db.FetchedValue())
     is_deleted = db.Column(db.Boolean, nullable=False, server_default=db.text('false'))
     deleted_at = db.Column(db.DateTime, nullable=True)
@@ -23,5 +24,6 @@ class Image(db.Model):
             'id': self.id,
             'product_id': self.product_id,
             'url': self.url,
+            'public_id': self.public_id,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
