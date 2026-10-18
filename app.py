@@ -5,6 +5,7 @@ from flask_jwt_extended import JWTManager
 from datetime import timedelta
 import os
 from dotenv import load_dotenv
+import cloudinary
 
 load_dotenv()
 
@@ -27,9 +28,22 @@ def create_app(config=None):
     app.config['MIDTRANS_CLIENT_KEY'] = os.getenv("MIDTRANS_CLIENT_KEY")
     app.config['MIDTRANS_IS_PRODUCTION'] = os.getenv("MIDTRANS_IS_PRODUCTION", "false").lower() == "true"
 
+    # Cloudinary media storage configuration
+    app.config['CLOUDINARY_CLOUD_NAME'] = os.getenv("CLOUDINARY_CLOUD_NAME")
+    app.config['CLOUDINARY_API_KEY'] = os.getenv("CLOUDINARY_API_KEY")
+    app.config['CLOUDINARY_API_SECRET'] = os.getenv("CLOUDINARY_API_SECRET")
+
     # Override with any test/custom config
     if config:
         app.config.update(config)
+
+    # Initialize the Cloudinary SDK from app config
+    cloudinary.config(
+        cloud_name=app.config.get('CLOUDINARY_CLOUD_NAME'),
+        api_key=app.config.get('CLOUDINARY_API_KEY'),
+        api_secret=app.config.get('CLOUDINARY_API_SECRET'),
+        secure=True,
+    )
 
     db.init_app(app)
     jwt.init_app(app)
