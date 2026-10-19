@@ -107,7 +107,7 @@ def delete_category(category_id):
             return jsonify({"message": "Category not found", "status": "not found"}), 404
 
         # Check if category has products linked to it
-        products = Product.query.filter_by(category_id=category_id).first()
+        products = Product.query.filter_by(category_id=category_id).filter_by(is_deleted=False).first()
         if products:
             return jsonify({"message": "Cannot delete category with existing products", "status": "error"}), 409
 

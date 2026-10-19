@@ -101,7 +101,7 @@ def create_product():
             return validation_error
 
         category = Category.query.get(data['category_id'])
-        if not category:
+        if not category or category.is_deleted:
             return jsonify({"message": "Category not found", "status": "error"}), 404
 
         product = Product(
