@@ -1,5 +1,11 @@
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import create_access_token, create_refresh_token
+from flask_jwt_extended import (
+    create_access_token,
+    create_refresh_token,
+    jwt_required,
+    get_jwt,
+    get_jwt_identity,
+)
 from models import User
 import bcrypt
 
@@ -42,3 +48,23 @@ def login_user():
     except Exception as e:
         print(f"Error logging in: {e}")
         return jsonify({"message": "Login error", "status": "error"}), 500
+
+
+# Refresh access token (POST)
+# Requires a valid refresh token in the Authorization header:
+#   Authorization: Bearer <refresh_token>
+# Issues a new short-lived access token, re-attaching the user's role claim.
+@auth_bp.route('/refresh', methods=['POST'])
+@jwt_required(refresh=True)
+def refresh():
+    try:
+        identity = get_jwt_identity()
+        role = get_jwt().get("role")
+        access_token = create_access_token(
+            identity=identity,
+            additional_claims={"role": role}
+        )
+        return jsonify({"access_token": access_token, "status": "ok"}), 200
+    except Exception as e:
+        print(f"Error refreshing token: {e}")
+        return jsonify({"message": "Token refresh error", "status": "error"}), 500
