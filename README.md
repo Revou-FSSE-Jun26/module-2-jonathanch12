@@ -76,7 +76,7 @@ module-2-jonathanch12/
 │   ├── __init__.py                             # Blueprint exports
 │   ├── main.py                                 # Home/health check route
 │   ├── user.py                                 # User registration and retrieval
-│   ├── auth.py                                 # Login (JWT token generation)
+│   ├── auth.py                                 # Login (JWT token generation) and access-token refresh
 │   ├── product.py                              # Product CRUD (admin-protected)
 │   ├── image.py                                # Product image CRUD via Cloudinary (admin-protected writes, public reads)
 │   ├── category.py                             # Category CRUD (admin-protected)
@@ -173,7 +173,10 @@ MIDTRANS_IS_PRODUCTION="false"
 CLOUDINARY_CLOUD_NAME="your-cloudinary-cloud-name"
 CLOUDINARY_API_KEY="your-cloudinary-api-key"
 CLOUDINARY_API_SECRET="your-cloudinary-api-secret"
+FRONTEND_ORIGINS="http://localhost:3000"
 ```
+
+`FRONTEND_ORIGINS` is a comma-separated list of origins allowed by CORS (the front-end app runs on a separate origin). Include every origin the front end is served from, for example `http://localhost:3000,https://your-frontend.vercel.app`. If unset, it defaults to `http://localhost:3000`.
 
 Generate the JWT secret key:
 
@@ -221,6 +224,7 @@ The app will be available at `http://127.0.0.1:5000`.
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/auth/login` | Login (returns JWT access and refresh tokens) |
+| POST | `/auth/refresh` | Exchange a refresh token for a new access token |
 | POST | `/users/` | Register a new user |
 | GET | `/users/<id>` | Get user by ID |
 
@@ -353,14 +357,53 @@ The `status` column stores the raw Midtrans `transaction_status` for accurate re
 
 ## Authentication
 
-The API uses JWT (JSON Web Tokens) for authentication. After logging in, include the access token in the `Authorization` header:
+The API uses JWT (JSON Web Tokens) for authentication. Tokens carry a `role` claim (`admin` or `customer`) that drives role-based access control.
+
+### Login
+
+`POST /auth/login` with an email and password returns two tokens:
+
+- **Access token** — short-lived (1 hour), sent with every protected request.
+- **Refresh token** — long-lived (7 days), used only to obtain a new access token.
+
+```json
+{
+  "message": "Login successful",
+  "name": "Sarah Tan",
+  "access_token": "<jwt_access_token>",
+  "refresh_token": "<jwt_refresh_token>",
+  "status": "ok"
+}
+```
+
+Include the access token in the `Authorization` header on protected requests:
 
 ```
 Authorization: Bearer <access_token>
 ```
 
-- **Access token** expires in 1 hour.
-- **Refresh token** expires in 7 days.
+### Refreshing the access token
+
+When the access token expires, call `POST /auth/refresh` with the **refresh token** (not the access token) in the `Authorization` header to get a new access token — no need to re-send credentials. The new access token preserves the user's `role` claim.
+
+```bash
+curl -X POST http://127.0.0.1:5000/auth/refresh \
+  -H "Authorization: Bearer <refresh_token>"
+```
+
+```json
+{
+  "access_token": "<new_jwt_access_token>",
+  "status": "ok"
+}
+```
+
+Sending an access token to this endpoint (instead of a refresh token) is rejected with `422`; a missing, expired, or invalid token returns `401`.
+
+### Logout
+
+There is no logout endpoint. JWTs are stateless and are not tracked server-side, so the server cannot invalidate a token on demand. Logout is handled on the client by discarding the stored access and refresh tokens. Any token that was already issued remains valid until it expires (access token up to 1 hour, refresh token up to 7 days). True server-side revocation would require a token blocklist, which is not currently implemented.
+
 - User roles: `admin`, `customer`.
 
 ---
