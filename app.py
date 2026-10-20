@@ -2,6 +2,7 @@ from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_jwt_extended import JWTManager
+from flask_cors import CORS
 from datetime import timedelta
 import os
 from dotenv import load_dotenv
@@ -43,6 +44,23 @@ def create_app(config=None):
         api_key=app.config.get('CLOUDINARY_API_KEY'),
         api_secret=app.config.get('CLOUDINARY_API_SECRET'),
         secure=True,
+    )
+
+    # Cross-Origin Resource Sharing for the separate front-end app.
+    # FRONTEND_ORIGINS is a comma-separated list of allowed origins
+    # (e.g. "http://localhost:3000,https://your-frontend.vercel.app").
+    # Only browser requests from these origins are permitted. Bearer tokens
+    # travel in the Authorization header, so credentials support is not needed.
+    frontend_origins = [
+        origin.strip()
+        for origin in os.getenv("FRONTEND_ORIGINS", "http://localhost:3000").split(",")
+        if origin.strip()
+    ]
+    CORS(
+        app,
+        resources={r"/*": {"origins": frontend_origins}},
+        allow_headers=["Content-Type", "Authorization"],
+        methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     )
 
     db.init_app(app)
