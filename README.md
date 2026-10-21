@@ -105,6 +105,7 @@ module-2-jonathanch12/
 │   ├── payment.py                              # Payment model
 │   └── user.py                                 # User model
 ├── locustfile.py                               # Load testing configuration
+├── openapi.yaml                                # API interaction documentation
 ├── requirements.txt                            # Python dependencies (For deployment)
 ├── requirements-localdev.txt                   # Python dependencies (For local development)
 └── README.md
@@ -476,7 +477,7 @@ Two user scenarios are tested:
 
 Full API documentation with request/response examples:
 
-https://documenter.getpostman.com/view/57333016/2sBYApzDBC
+https://documenter.getpostman.com/view/57333016/2sBYHSzgiz
 
 ---
 
