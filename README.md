@@ -62,7 +62,7 @@ module-2-jonathanch12/
 │   ├── schema.sql                              # Table creation scripts
 │   ├── seed.sql                                # Sample data (SQL)
 │   ├── queries.sql                             # Example queries
-│   └── Schema Diagram (ERD_Screenshot_DBeaver).png
+│   └── Schema Diagram.png                      # Schema diagram (ERD)
 ├── helper/
 │   └── seed.py                                 # Python database seeder for users, categories, and products
 │   └── seed_order.py                           # Python database seeder for orders
