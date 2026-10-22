@@ -461,18 +461,6 @@ Two user scenarios are tested:
 
 ---
 
-## Seeded Test Accounts
-
-| Name | Email | Password | Role |
-|------|-------|----------|------|
-| John Alexander | john@email.com | John1234 | admin |
-| Sarah Tan | sarah@email.com | Sarah1234 | customer |
-| Michael Max | michael@email.com | Michael1234 | customer |
-| Alonso Wirtz | alonso@email.com | Alonso1234 | customer |
-| David Alten | david@email.com | David1234 | customer |
-
----
-
 ### Postman Documentation
 
 Full API documentation with request/response examples:
@@ -490,6 +478,10 @@ https://revoshop-flask.vercel.app/
 > [!NOTE]  
 > **Live Demo Status:** The production deployment on [Vercel](https://revoshop-flask.vercel.app/) reflects the stable release at commit [`05dc237`](https://github.com/Revou-FSSE-Jun26/module-2-jonathanch12/commit/05dc2379b12fad4fcdd35ef460c33d0bf8ecab12) (v1.0.0).  
 > Recent commits on the `main` branch contain unreleased updates and work-in-progress features that are not yet deployed.
+
+---
+
+Disclaimer: RevoShop is a portfolio project created for educational and demonstration purposes only. It is not an actual commercial store, and no items are available for real purchase. All trademarks, logos, and product imagery belong to their respective owners.
 
 ---
 
