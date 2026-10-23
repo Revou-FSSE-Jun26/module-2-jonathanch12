@@ -1640,6 +1640,10 @@ components:
           format: float
         stock:
           type: integer
+        category_id:
+          type: integer
+        category_name:
+          type: string
         images:
           type: array
           items:
