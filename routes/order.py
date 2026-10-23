@@ -5,7 +5,7 @@ from app import db
 from models import User, Order, Product, order_items
 
 # Fixed number of orders returned per page
-ORDERS_PER_PAGE = 6
+ORDERS_PER_PAGE = 8
 
 # Order blueprint
 order_bp = Blueprint('order', __name__, url_prefix='/orders')

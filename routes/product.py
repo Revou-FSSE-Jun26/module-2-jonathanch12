@@ -45,8 +45,8 @@ def get_products():
                 )
             )
 
-        # Pagination - 6 products per page
-        per_page = 6
+        # Pagination - 8 products per page
+        per_page = 8
         page = request.args.get('page', 1, type=int)
         if page < 1:
             page = 1

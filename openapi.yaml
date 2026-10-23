@@ -476,7 +476,7 @@ paths:
     get:
       tags: [Products]
       summary: List products
-      description: Supports optional keyword search and pagination (6 per page).
+      description: Supports optional keyword search and pagination (8 per page).
       security: []
       parameters:
         - name: search
@@ -940,7 +940,7 @@ paths:
       summary: List orders (customer sees own, admin sees all)
       description: |
         Customers receive only their own orders. Admins receive all orders and
-        may filter by `user_id`. Results are paginated (6 per page) and ordered
+        may filter by `user_id`. Results are paginated (8 per page) and ordered
         by newest first. Soft-deleted orders are never returned.
       security:
         - bearerAuth: []
