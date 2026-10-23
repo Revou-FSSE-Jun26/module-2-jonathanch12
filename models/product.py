@@ -1,6 +1,6 @@
 # coding: utf-8
 from app import db
-
+from models import Category
 
 class Product(db.Model):
     __tablename__ = 'products'
@@ -18,12 +18,15 @@ class Product(db.Model):
     category = db.relationship('Category', primaryjoin='Product.category_id == Category.id', backref='products')
 
     def to_dict(self):
+        selfCategory = Category.query.get(self.category_id)
         return {
             'id': self.id,
             'name': self.name,
             'description': self.description,
             'price': self.price,
             'stock': self.stock,
+            'category_id': self.category_id,
+            'category_name': selfCategory.name,
             'images': [img.to_dict() for img in self.images.filter_by(is_deleted=False).all()],
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
