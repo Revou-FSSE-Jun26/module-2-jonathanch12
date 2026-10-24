@@ -19,7 +19,7 @@ values
 (2,'RevoGrip Pro Maimai Touchscreen Gloves (Pair)','Ultra-thin, breathable cotton-elastane rhythm game gloves. Optimized for smooth glide, low friction on arcade touchscreens, and rapid button taps without losing touch sensitivity.',65000,900),
 (2,'Project D "Fujiwara Tofu Shop" Akina Touge Desk Mat (900x400mm)','Extra-large stitched-edge desk pad featuring the Mount Akina hairpin topographic route and minimalist AE86 silhouette. High-density cloth surface with non-slip rubber base.',220000,60),
 (2,'Custom Arcade IC Card Sleeve & Lanyard Set (Aime / BanaPassport Fit)','Hard-case RFID-friendly card sleeve with quick-release neck lanyard and carabiner. Allows seamless tap-and-play access for arcade coin-op network terminals.',85000,45),
-(2,'WMMT Meter Gauge Minimalist Windbreaker Jacket','Lightweight water-resistant streetwear windbreaker featuring subtle chest embroidery inspired by turbo boost gauges and reflective highway coordinates on the back.',429000,20),
+(2,'Neon Arcade Windbreaker Jacket','Lightweight water-resistant streetwear windbreaker featuring neon themed arcade patterns.',429000,20),
 (2,'Oracle Red Bull Racing RB19 No.1 - Max Verstappen 1:18 Model','A scaled 1:18 model of Oracle Red Bull Racing RB19 F1 Car driven by Max Verstappen for 2023 season.',5500000,18),
 (3,'RevoAero Quick-Dry Seamless Training Tee','Breathable athletic short-sleeve shirt crafted from sweat-wicking synthetic fiber blend with anti-odor treatment. Designed for gym sessions, cardio, and intense arcade rhythm marathons.',249000,500),
 (3,'Apex 2-in-1 Compression Training Shorts (7-inch)','Lightweight outer running shorts with integrated compression liner, secure phone pocket, towel loop, and reflective accents for low-light training.',319000,250),
