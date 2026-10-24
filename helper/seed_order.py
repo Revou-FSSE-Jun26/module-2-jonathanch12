@@ -10,11 +10,8 @@ from models import Order, Product, order_items
 
 def seed_orders():
     orders = [
-        {"user_id": 4, "total_amount": 998000, "status": "completed"},
-        {"user_id": 2, "total_amount": 350000, "status": "processing"},
-        {"user_id": 3, "total_amount": 1370000, "status": "completed"},
-        {"user_id": 4, "total_amount": 275000, "status": "completed"},
-        {"user_id": 5, "total_amount": 850000, "status": "processing"},
+        {"user_id": 2, "total_amount": 6850000, "status": "cancelled"},
+        {"user_id": 2, "total_amount": 70034000, "status": "pending"},
     ]
 
     created = 0
@@ -33,13 +30,10 @@ def seed_orders():
 
 def seed_order_items():
     items = [
-        {"order_id": 1, "product_id": 1, "quantity": 1, "unit_price": 199000},
-        {"order_id": 1, "product_id": 2, "quantity": 1, "unit_price": 799000},
-        {"order_id": 2, "product_id": 3, "quantity": 1, "unit_price": 350000},
-        {"order_id": 3, "product_id": 4, "quantity": 2, "unit_price": 450000},
-        {"order_id": 3, "product_id": 7, "quantity": 2, "unit_price": 180000},
-        {"order_id": 4, "product_id": 8, "quantity": 1, "unit_price": 275000},
-        {"order_id": 5, "product_id": 10, "quantity": 1, "unit_price": 850000},
+        {"order_id": 1, "product_id": 5, "quantity": 1, "unit_price": 6850000},
+        {"order_id": 2, "product_id": 2, "quantity": 1, "unit_price": 68999000},
+        {"order_id": 2, "product_id": 4, "quantity": 1, "unit_price": 950000},
+        {"order_id": 2, "product_id": 8, "quantity": 1, "unit_price": 85000},
     ]
 
     created = 0
