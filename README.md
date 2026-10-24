@@ -50,7 +50,7 @@ The application uses a PostgreSQL database with the following tables:
 
 ### ERD (Entity Relationship Diagram)
 
-![ERD Diagram](database/Schema%20Diagram%20(ERD_Screenshot_DBeaver).png)
+![ERD Diagram](database/Schema%20Diagram.png)
 
 ---
 
