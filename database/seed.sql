@@ -13,7 +13,7 @@ insert into products(category_id, name, description, price, stock)
 values
 (1,'Samsung Galaxy Z Fold7 (12GB / 512GB)','Premium book-style foldable smartphone powered by Snapdragon 8 Elite for Galaxy. Features a 7.6-inch Dynamic AMOLED 2X main display, Armor Aluminum frame, IP48 water resistance, and S-Pen support.',28499000,50),
 (1,'iPhone Duo (2TB)','The largest iPhone display ever. In a thin, foldable design. 48MP Dual Fusion camera system. A20 Pro chip. All-day battery life.',68999000,25),
-(1,'ASUS ROG Zephyrus G14','googleCompact 14-inch high-performance gaming laptop with AMD Ryzen 9 8945HS, NVIDIA GeForce RTX 5060 8GB, 32GB LPDDR5X, 1TB NVMe Gen4 SSD, and a 3K 120Hz OLED ROG Nebula display.',34999000,40),
+(1,'ASUS ROG Zephyrus G14','Compact 14-inch high-performance gaming laptop with AMD Ryzen 9 8945HS, NVIDIA GeForce RTX 5060 8GB, 32GB LPDDR5X, 1TB NVMe Gen4 SSD, and a 3K 120Hz OLED ROG Nebula display.',34999000,40),
 (1,'Xbox Wireless Controller + USB-C Cable (Carbon Black)','Ergonomic wireless controller featuring sculpted surfaces, hybrid D-pad, textured grip on triggers and bumpers, with Bluetooth and low-latency USB-C connection for PC and console.',950000,1000),
 (1,'Moza R3 Direct Drive Racing Bundle for PC / Xbox','Complete sim-racing setup featuring a 3.9Nm Direct Drive wheel base, high-grade aluminum steering wheel, and dual-pedal steel set. Designed for high fidelity in racing simulators.',6850000,15),
 (2,'RevoGrip Pro Maimai Touchscreen Gloves (Pair)','Ultra-thin, breathable cotton-elastane rhythm game gloves. Optimized for smooth glide, low friction on arcade touchscreens, and rapid button taps without losing touch sensitivity.',65000,900),
