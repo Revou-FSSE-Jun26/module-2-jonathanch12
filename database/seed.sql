@@ -1,11 +1,4 @@
--- insert into users(name, email, password, address, phone)
--- values
--- ('John Alexander', 'john@email.com', 'John123', 'Park Ave 123', '081234567899'),
--- ('Sarah Tan', 'sarah@email.com', 'Sarah123', 'Milton 1', '081345678912'),
--- ('Michael Max', 'michael@email.com', 'Michael123', 'Sora Area', '081456789123'),
--- ('Alonso Wirtz', 'alonso@email.com', 'Alonso123', 'Keynes 123', '081567891234'),
--- ('David Alten', 'david@email.com', 'David123', 'Stamford 4', '081678912345');
-
+# Categories
 insert into categories(name, description)
 values
 ('Flagship Tech', 'Cutting-edge mobile devices, ultra-portable gaming laptops, and enthusiast computing hardware built for peak performance and sleek aesthetics.'),
@@ -15,6 +8,7 @@ values
 ('Desk Setup & Workspace', 'Ergonomic accessories, ambient studio lighting, and premium desk organization essentials crafted to build clean, productive, and aesthetic desk setups.'),
 ('Audiophile & Head-Fi', 'Studio-grade in-ear monitors, planar magnetic headphones, and portable DAC/amplifiers tuned for precision rhythm gaming, immersive racing audio, and hi-res music listening.');
 
+# Products
 insert into products(category_id, name, description, price, stock)
 values
 (1,'Samsung Galaxy Z Fold7 (12GB / 512GB)','Premium book-style foldable smartphone powered by Snapdragon 8 Elite for Galaxy. Features a 7.6-inch Dynamic AMOLED 2X main display, Armor Aluminum frame, IP48 water resistance, and S-Pen support.',28499000,50),
@@ -40,21 +34,3 @@ values
 (6,'Moondrop Blessing 3 Hybrid In-Ear Monitors','2DD + 4BA hybrid driver IEMs tuned to the VDSF target response, delivering precise soundstage localization, crisp highs, and tight bass for rhythm games and acoustic tracks.',4750000,100),
 (6,'Sennheiser HD 560S Open-Back Reference Headphones','Neutral, transparent open-back headphones with angled transducers for natural spatial sound reproduction, ideal for long sim-racing sessions and desktop listening.',3199000,100),
 (6,'FiiO BTR15 Portable Bluetooth DAC & Headphone Amp','Compact dual ES9219C DAC amplifier featuring 3.5mm unbalanced and 4.4mm balanced outputs, OLED display, and high-res Bluetooth audio decoding (LDAC/aptX HD).',1650000,100);
-
--- insert into orders(user_id, total_amount, status)
--- values
--- (1,998000,'completed'),
--- (2,350000,'processing'),
--- (3,1370000,'completed'),
--- (1,275000,'completed'),
--- (5,850000,'processing');
-
--- insert into order_items(order_id, product_id, quantity, unit_price)
--- values
--- (1,1,1,199000),
--- (1,2,1,799000),
--- (2,3,1,350000),
--- (3,4,2,450000),
--- (3,7,2,180000),
--- (4,8,1,275000),
--- (5,10,1,850000);
