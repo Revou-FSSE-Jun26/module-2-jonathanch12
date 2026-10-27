@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import (
     create_access_token,
     create_refresh_token,
@@ -7,10 +7,23 @@ from flask_jwt_extended import (
     get_jwt_identity,
 )
 from models import User
+from datetime import timedelta
 import bcrypt
 
 # Auth blueprint
 auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
+
+
+def _access_token_expires_in():
+    """Return the access token lifetime in whole seconds.
+
+    Reads JWT_ACCESS_TOKEN_EXPIRES so the value stays in sync with app config.
+    Handles both timedelta and plain-int/float configurations.
+    """
+    expires = current_app.config.get("JWT_ACCESS_TOKEN_EXPIRES")
+    if isinstance(expires, timedelta):
+        return int(expires.total_seconds())
+    return int(expires)
 
 
 # Login user (POST)
@@ -43,6 +56,7 @@ def login_user():
             "name": user.name,
             "access_token": access_token,
             "refresh_token": refresh_token,
+            "expires_in": _access_token_expires_in(),
             "status": "ok"
         }), 200
     except Exception as e:
@@ -64,7 +78,11 @@ def refresh():
             identity=identity,
             additional_claims={"role": role}
         )
-        return jsonify({"access_token": access_token, "status": "ok"}), 200
+        return jsonify({
+            "access_token": access_token,
+            "expires_in": _access_token_expires_in(),
+            "status": "ok"
+        }), 200
     except Exception as e:
         print(f"Error refreshing token: {e}")
         return jsonify({"message": "Token refresh error", "status": "error"}), 500
