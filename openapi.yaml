@@ -129,6 +129,10 @@ paths:
                   refresh_token:
                     type: string
                     description: JWT refresh token (valid 7 days)
+                  expires_in:
+                    type: integer
+                    description: Access token lifetime in seconds
+                    example: 3600
                   status:
                     type: string
                     example: ok
@@ -176,6 +180,10 @@ paths:
                   access_token:
                     type: string
                     description: JWT access token (valid 1 hour)
+                  expires_in:
+                    type: integer
+                    description: Access token lifetime in seconds
+                    example: 3600
                   status:
                     type: string
                     example: ok
