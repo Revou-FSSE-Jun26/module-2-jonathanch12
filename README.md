@@ -227,7 +227,8 @@ The app will be available at `http://127.0.0.1:5000`.
 | POST | `/auth/login` | Login (returns JWT access and refresh tokens) |
 | POST | `/auth/refresh` | Exchange a refresh token for a new access token |
 | POST | `/users/` | Register a new user |
-| GET | `/users/<id>` | Get user by ID |
+| GET | `/users` | View user's personal data |
+| PUT | `/users` | Update user's personal data (name, password, phone, address) |
 
 ### Admin-Protected Routes (requires admin JWT)
 
