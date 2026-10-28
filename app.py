@@ -68,15 +68,26 @@ def create_app(config=None):
 
     # Cross-Origin Resource Sharing for the separate front-end app.
     # FRONTEND_ORIGINS is a comma-separated list of allowed origins
-    # (e.g. "http://localhost:3000,https://your-frontend.vercel.app").
+    # (e.g. "http://localhost:3000,https://localhost:3000,https://your-frontend.vercel.app").
     # JWTs now travel in HttpOnly cookies, so the browser only sends them on
     # credentialed cross-origin requests. supports_credentials=True is required
     # for that, and it forbids a wildcard origin, so origins must be explicit.
     # X-CSRF-TOKEN is allowed so the front-end can submit the double-submit
     # CSRF token on state-changing requests.
+    #
+    # IMPORTANT: origin matching is scheme-exact. "https://localhost:3000" and
+    # "http://localhost:3000" are DIFFERENT origins. When the front-end runs
+    # over HTTPS locally (mkcert), its origin is "https://localhost:3000", so
+    # that exact string must be present here or the browser blocks the
+    # preflight with "No 'Access-Control-Allow-Origin' header". The default
+    # below therefore allows both local schemes; override via FRONTEND_ORIGINS
+    # for deployed front-ends.
     frontend_origins = [
         origin.strip()
-        for origin in os.getenv("FRONTEND_ORIGINS", "http://localhost:3000").split(",")
+        for origin in os.getenv(
+            "FRONTEND_ORIGINS",
+            "http://localhost:3000,https://localhost:3000",
+        ).split(",")
         if origin.strip()
     ]
     CORS(

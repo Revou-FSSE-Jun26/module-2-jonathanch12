@@ -28,3 +28,10 @@ env/
 
 .coverage
 local/
+
+# Local HTTPS certificates (mkcert) - never commit certs or keys
+certs/*.pem
+*.pem
+*-key.pem
+*.key
+*.crt

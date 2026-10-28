@@ -212,6 +212,102 @@ The app will be available at `http://127.0.0.1:5000`.
 
 ---
 
+## Running over HTTPS (Local Development)
+
+The API issues its JWT cookies with `SameSite=None` and `Secure`. Browsers reject a `SameSite=None` cookie that is not also `Secure`, so cross-origin browser testing against the API needs HTTPS even locally. [mkcert](https://github.com/FiloSottile/mkcert) issues a locally-trusted certificate, so the browser accepts `https://127.0.0.1:5000` with no warnings.
+
+> This is a **local development** concern only. In production (e.g. Vercel) HTTPS is terminated by the platform — you do not use mkcert, certificate files, or `flask run` there.
+
+### 1. Install mkcert (one-time, machine level)
+
+mkcert is a standalone tool, **not** a Python package — it does not go in the virtual environment or `requirements-localdev.txt`.
+
+```powershell
+winget install FiloSottile.mkcert
+```
+
+(When winget asks you to accept the source agreements, answer **Yes**.) Alternatively, download the Windows binary from the [mkcert releases page](https://github.com/FiloSottile/mkcert/releases), rename it to `mkcert.exe`, and place it on your `PATH`.
+
+### 2. Trust the local CA (one-time, machine level)
+
+```powershell
+mkcert -install
+```
+
+### 3. Generate the certificate for the project
+
+Run this from the project's `certs/` folder so the files land there (they are git-ignored and never committed):
+
+```powershell
+cd certs
+mkcert localhost 127.0.0.1
+cd ..
+```
+
+This produces `localhost+1.pem` (certificate) and `localhost+1-key.pem` (key) inside `certs/`.
+
+### 4. Run the app over HTTPS
+
+```powershell
+python run_local.py
+```
+
+`run_local.py` auto-detects the mkcert files in `certs/` and starts the dev server with TLS. The app is then available at **`https://127.0.0.1:5000/`**. If the certificate is missing, the script prints the setup steps and exits.
+
+With HTTPS working locally you can keep `JWT_COOKIE_SECURE="true"` in `.env` so local behaviour matches production. Plain HTTP via `flask run --debug` still works if you prefer it (set `JWT_COOKIE_SECURE="false"` in that case).
+
+### Uninstalling mkcert (restore the machine to its original state)
+
+> [!IMPORTANT]
+> Do the steps **in order**. `mkcert -install` added a local Certificate Authority to your system (and browser) trust stores. Deleting the `mkcert` binary alone does **not** remove that CA — you must run `mkcert -uninstall` *before* removing the binary, otherwise the trusted CA is left behind and has to be deleted manually.
+
+#### 1. Untrust the local CA
+
+Run this **while mkcert is still installed**. It undoes `mkcert -install`, removing the mkcert root CA from the Windows (and Firefox/NSS, if present) trust stores. A Windows security dialog may appear — confirm it.
+
+```powershell
+mkcert -uninstall
+```
+
+On success it prints:
+
+```
+The local CA is now uninstalled from the system trust store(s)! 👋
+```
+
+> [!NOTE]
+> `mkcert -uninstall` only **untrusts** the CA — it does *not* delete anything. The mkcert binary, the root CA files in `%LOCALAPPDATA%\mkcert`, and your project's `certs/*.pem` all stay on disk; they are simply no longer trusted. After this step, loading `https://127.0.0.1:5000` will show the "not private" warning again. The remaining steps below are what actually remove the files. (If you only wanted to stop trusting mkcert and plan to keep using it later, you can stop here and re-run `mkcert -install` to re-trust it — no need to regenerate the certificate.)
+
+#### 2. Uninstall the mkcert binary
+
+If you installed it with winget:
+
+```powershell
+winget uninstall FiloSottile.mkcert
+```
+
+If you installed it by downloading the binary manually, just delete the `mkcert.exe` file (and remove its folder from your `PATH` if you added one).
+
+#### 3. Delete the generated CA files
+
+`mkcert -uninstall` removes the CA from the trust stores but leaves the generated root CA files on disk. Delete the CA root folder to fully clean up:
+
+```powershell
+Remove-Item -Recurse -Force "$env:LOCALAPPDATA\mkcert"
+```
+
+#### 4. Delete the project certificate files (optional)
+
+These are already git-ignored, so they only live on your machine. Remove them if you no longer want local HTTPS:
+
+```powershell
+Remove-Item ".\certs\localhost+1.pem", ".\certs\localhost+1-key.pem"
+```
+
+After these steps, the machine is back to its original state: no mkcert binary, no trusted local CA, and no leftover certificate files. (The `certs/.gitkeep` placeholder stays so the folder remains in the repo.)
+
+---
+
 ## API Endpoints
 
 ### Public Routes

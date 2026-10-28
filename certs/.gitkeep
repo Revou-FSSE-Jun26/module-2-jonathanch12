@@ -1,0 +1,3 @@
+# This folder holds locally-generated mkcert TLS certificates for HTTPS development.
+# The certificate and key files themselves are git-ignored (see .gitignore).
+# Generate them with:  mkcert localhost 127.0.0.1   (run from this folder)
