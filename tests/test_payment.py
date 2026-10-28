@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 from flask_jwt_extended import create_access_token
 from app import db
 from models import User, Order, Payment
+from tests._helpers import auth
 
 
 @pytest.fixture
@@ -80,7 +81,7 @@ class TestCreatePayment:
             order_id = _make_order(customer_user["id"], total_amount=199000)
 
         response = client.post('/payments', json={"order_id": order_id},
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 201
@@ -98,7 +99,7 @@ class TestCreatePayment:
             order_id = _make_order(customer_user["id"], total_amount=500000)
 
         response = client.post('/payments', json={"order_id": order_id, "amount": 1},
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 201
@@ -110,7 +111,7 @@ class TestCreatePayment:
             order_id = _make_order(customer_user["id"])
 
         response = client.post('/payments', json={"order_id": order_id},
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         payment_id = response.get_json()["payment"]["id"]
 
         with app.app_context():
@@ -125,7 +126,7 @@ class TestCreatePayment:
             order_id = _make_order(other_customer["id"])
 
         response = client.post('/payments', json={"order_id": order_id},
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 403
@@ -137,7 +138,7 @@ class TestCreatePayment:
             order_id = _make_order(other_customer["id"])
 
         client.post('/payments', json={"order_id": order_id},
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
 
         with app.app_context():
             assert Payment.query.count() == 0
@@ -145,7 +146,7 @@ class TestCreatePayment:
     def test_payment_order_not_found(self, client, customer_user, mock_snap):
         """Paying for a non-existent order returns 404."""
         response = client.post('/payments', json={"order_id": 9999},
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 404
@@ -157,7 +158,7 @@ class TestCreatePayment:
             order_id = _make_order(customer_user["id"], is_deleted=True)
 
         response = client.post('/payments', json={"order_id": order_id},
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 404
@@ -169,7 +170,7 @@ class TestCreatePayment:
             order_id = _make_order(customer_user["id"], status="processing")
 
         response = client.post('/payments', json={"order_id": order_id},
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 409
@@ -178,7 +179,7 @@ class TestCreatePayment:
     def test_payment_missing_order_id(self, client, customer_user, mock_snap):
         """Missing order_id returns 400."""
         response = client.post('/payments', json={},
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 400
@@ -187,7 +188,7 @@ class TestCreatePayment:
     def test_payment_invalid_order_id_type(self, client, customer_user, mock_snap):
         """A non-integer order_id returns 400."""
         response = client.post('/payments', json={"order_id": "abc"},
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 400
@@ -207,7 +208,7 @@ class TestCreatePayment:
             order_id = _make_order(customer_user["id"])
 
         response = client.post('/payments', json={"order_id": order_id},
-            headers={"Authorization": f"Bearer {admin_user['token']}"})
+            headers=auth(client, admin_user['token']))
         data = response.get_json()
 
         assert response.status_code == 403
@@ -224,7 +225,7 @@ class TestGetPaymentById:
             payment_id = _make_payment(order_id)
 
         response = client.get(f'/payments/{payment_id}',
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 200
@@ -239,7 +240,7 @@ class TestGetPaymentById:
             payment_id = _make_payment(order_id)
 
         response = client.get(f'/payments/{payment_id}',
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 403
@@ -252,7 +253,7 @@ class TestGetPaymentById:
             payment_id = _make_payment(order_id)
 
         response = client.get(f'/payments/{payment_id}',
-            headers={"Authorization": f"Bearer {admin_user['token']}"})
+            headers=auth(client, admin_user['token']))
         data = response.get_json()
 
         assert response.status_code == 200
@@ -261,7 +262,7 @@ class TestGetPaymentById:
     def test_payment_not_found(self, client, admin_user):
         """Fetching a non-existent payment returns 404."""
         response = client.get('/payments/9999',
-            headers={"Authorization": f"Bearer {admin_user['token']}"})
+            headers=auth(client, admin_user['token']))
         data = response.get_json()
 
         assert response.status_code == 404
@@ -285,7 +286,7 @@ class TestGetPaymentById:
             token = create_access_token(identity="99", additional_claims={"role": "guest"})
 
         response = client.get(f'/payments/{payment_id}',
-            headers={"Authorization": f"Bearer {token}"})
+            headers=auth(client, token))
         data = response.get_json()
 
         assert response.status_code == 403
@@ -303,7 +304,7 @@ class TestGetOrderPayments:
             _make_payment(order_id, status="pending", midtrans_order_id="b")
 
         response = client.get(f'/orders/{order_id}/payments',
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 200
@@ -317,7 +318,7 @@ class TestGetOrderPayments:
             _make_payment(order_id)
 
         response = client.get(f'/orders/{order_id}/payments',
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 403
@@ -330,7 +331,7 @@ class TestGetOrderPayments:
             _make_payment(order_id)
 
         response = client.get(f'/orders/{order_id}/payments',
-            headers={"Authorization": f"Bearer {admin_user['token']}"})
+            headers=auth(client, admin_user['token']))
         data = response.get_json()
 
         assert response.status_code == 200
@@ -339,7 +340,7 @@ class TestGetOrderPayments:
     def test_list_payments_order_not_found(self, client, admin_user):
         """Listing payments for a non-existent order returns 404."""
         response = client.get('/orders/9999/payments',
-            headers={"Authorization": f"Bearer {admin_user['token']}"})
+            headers=auth(client, admin_user['token']))
         data = response.get_json()
 
         assert response.status_code == 404

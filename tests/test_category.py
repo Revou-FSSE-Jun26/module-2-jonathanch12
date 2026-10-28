@@ -1,6 +1,7 @@
 import pytest
 from app import db
 from models import Category, Product
+from tests._helpers import auth
 
 
 class TestCreateCategory:
@@ -11,7 +12,7 @@ class TestCreateCategory:
         response = client.post('/categories/', json={
             "name": "Electronics",
             "description": "Electronic gadgets"
-        }, headers={"Authorization": f"Bearer {admin_token}"})
+        }, headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 201
@@ -23,7 +24,7 @@ class TestCreateCategory:
         """Test creating category without name returns 400."""
         response = client.post('/categories/', json={
             "description": "Some description"
-        }, headers={"Authorization": f"Bearer {admin_token}"})
+        }, headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 400
@@ -39,7 +40,7 @@ class TestCreateCategory:
         response = client.post('/categories/', json={
             "name": "Electronics",
             "description": "Another description"
-        }, headers={"Authorization": f"Bearer {admin_token}"})
+        }, headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 409
@@ -57,7 +58,7 @@ class TestCreateCategory:
         """Test creating category with customer token returns 403."""
         response = client.post('/categories/', json={
             "name": "Electronics"
-        }, headers={"Authorization": f"Bearer {customer_token}"})
+        }, headers=auth(client, customer_token))
         data = response.get_json()
 
         assert response.status_code == 403
@@ -161,7 +162,7 @@ class TestUpdateCategory:
         response = client.put(f'/categories/{cat_id}', json={
             "name": "Updated Electronics",
             "description": "Updated description"
-        }, headers={"Authorization": f"Bearer {admin_token}"})
+        }, headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 200
@@ -172,7 +173,7 @@ class TestUpdateCategory:
         """Test updating non-existent category returns 404."""
         response = client.put('/categories/999', json={
             "name": "Updated"
-        }, headers={"Authorization": f"Bearer {admin_token}"})
+        }, headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 404
@@ -189,7 +190,7 @@ class TestUpdateCategory:
 
         response = client.put(f'/categories/{cat2_id}', json={
             "name": "Electronics"
-        }, headers={"Authorization": f"Bearer {admin_token}"})
+        }, headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 409
@@ -219,7 +220,7 @@ class TestUpdateCategory:
 
         response = client.put(f'/categories/{cat_id}', json={
             "name": "Updated"
-        }, headers={"Authorization": f"Bearer {customer_token}"})
+        }, headers=auth(client, customer_token))
         data = response.get_json()
 
         assert response.status_code == 403
@@ -238,7 +239,7 @@ class TestDeleteCategory:
             cat_id = category.id
 
         response = client.delete(f'/categories/{cat_id}',
-            headers={"Authorization": f"Bearer {admin_token}"})
+            headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 200
@@ -247,7 +248,7 @@ class TestDeleteCategory:
     def test_delete_category_not_found(self, client, admin_token):
         """Test deleting non-existent category returns 404."""
         response = client.delete('/categories/999',
-            headers={"Authorization": f"Bearer {admin_token}"})
+            headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 404
@@ -272,7 +273,7 @@ class TestDeleteCategory:
             cat_id = category.id
 
         response = client.delete(f'/categories/{cat_id}',
-            headers={"Authorization": f"Bearer {admin_token}"})
+            headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 409
@@ -299,7 +300,7 @@ class TestDeleteCategory:
             cat_id = category.id
 
         response = client.delete(f'/categories/{cat_id}',
-            headers={"Authorization": f"Bearer {customer_token}"})
+            headers=auth(client, customer_token))
         data = response.get_json()
 
         assert response.status_code == 403

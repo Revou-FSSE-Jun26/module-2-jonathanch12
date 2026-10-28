@@ -4,6 +4,7 @@ from unittest.mock import patch
 from app import db
 from models import Category, Product, Image
 from helper.cloudinary_service import CloudinaryServiceError
+from tests._helpers import auth
 
 
 @pytest.fixture
@@ -152,7 +153,7 @@ class TestGetProductImages:
         _add_image(app, sample_product, url="img")
 
         response = client.get(f'/products/{sample_product}/images/',
-            headers={"Authorization": f"Bearer {customer_token}"})
+            headers=auth(client, customer_token))
         data = response.get_json()
 
         assert response.status_code == 200
@@ -179,7 +180,7 @@ class TestAddProductImages:
         """Test admin can add a single image via a JSON url, stored as the Cloudinary URL."""
         response = client.post(f'/products/{sample_product}/images/', json={
             "url": "https://example.com/remote.jpg"
-        }, headers={"Authorization": f"Bearer {admin_token}"})
+        }, headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 201
@@ -199,7 +200,7 @@ class TestAddProductImages:
             f'/products/{sample_product}/images/',
             data={"file": _file("mouse.jpg")},
             content_type="multipart/form-data",
-            headers={"Authorization": f"Bearer {admin_token}"},
+            headers=auth(client, admin_token),
         )
         data = response.get_json()
 
@@ -214,7 +215,7 @@ class TestAddProductImages:
             f'/products/{sample_product}/images/',
             data={"file": [_file("a.jpg"), _file("b.jpg"), _file("c.jpg")]},
             content_type="multipart/form-data",
-            headers={"Authorization": f"Bearer {admin_token}"},
+            headers=auth(client, admin_token),
         )
         data = response.get_json()
 
@@ -228,7 +229,7 @@ class TestAddProductImages:
             {"url": "https://example.com/1.jpg"},
             {"url": "https://example.com/2.jpg"},
             {"url": "https://example.com/3.jpg"}
-        ], headers={"Authorization": f"Bearer {admin_token}"})
+        ], headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 201
@@ -239,7 +240,7 @@ class TestAddProductImages:
         """Test adding an image to a non-existent product returns 404."""
         response = client.post('/products/999/images/', json={
             "url": "https://example.com/x.jpg"
-        }, headers={"Authorization": f"Bearer {admin_token}"})
+        }, headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 404
@@ -250,7 +251,7 @@ class TestAddProductImages:
         """Test adding an image to a soft-deleted product returns 404."""
         response = client.post(f'/products/{deleted_product}/images/', json={
             "url": "https://example.com/x.jpg"
-        }, headers={"Authorization": f"Bearer {admin_token}"})
+        }, headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 404
@@ -259,7 +260,7 @@ class TestAddProductImages:
     def test_add_image_empty_list(self, client, admin_token, sample_product, mock_upload):
         """Test posting an empty list returns 400."""
         response = client.post(f'/products/{sample_product}/images/', json=[],
-            headers={"Authorization": f"Bearer {admin_token}"})
+            headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 400
@@ -269,7 +270,7 @@ class TestAddProductImages:
         """Test an image object without a url returns 400."""
         response = client.post(f'/products/{sample_product}/images/', json={
             "caption": "no url here"
-        }, headers={"Authorization": f"Bearer {admin_token}"})
+        }, headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 400
@@ -279,7 +280,7 @@ class TestAddProductImages:
         """Test a blank url string returns 400."""
         response = client.post(f'/products/{sample_product}/images/', json={
             "url": "   "
-        }, headers={"Authorization": f"Bearer {admin_token}"})
+        }, headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 400
@@ -289,7 +290,7 @@ class TestAddProductImages:
         """Test a non-string url returns 400."""
         response = client.post(f'/products/{sample_product}/images/', json={
             "url": 12345
-        }, headers={"Authorization": f"Bearer {admin_token}"})
+        }, headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 400
@@ -301,7 +302,7 @@ class TestAddProductImages:
              patch("routes.image.destroy_image") as mock_del:
             response = client.post(f'/products/{sample_product}/images/', json={
                 "url": "https://example.com/x.jpg"
-            }, headers={"Authorization": f"Bearer {admin_token}"})
+            }, headers=auth(client, admin_token))
 
         assert response.status_code == 502
         with app.app_context():
@@ -318,7 +319,7 @@ class TestAddProductImages:
             response = client.post(f'/products/{sample_product}/images/', json=[
                 {"url": "https://example.com/1.jpg"},
                 {"url": "https://example.com/2.jpg"},
-            ], headers={"Authorization": f"Bearer {admin_token}"})
+            ], headers=auth(client, admin_token))
 
         assert response.status_code == 502
         # The first (successful) upload must be destroyed to avoid orphaned assets.
@@ -338,7 +339,7 @@ class TestAddProductImages:
         """Test adding an image with a customer token returns 403."""
         response = client.post(f'/products/{sample_product}/images/', json={
             "url": "https://example.com/x.jpg"
-        }, headers={"Authorization": f"Bearer {customer_token}"})
+        }, headers=auth(client, customer_token))
         data = response.get_json()
 
         assert response.status_code == 403
@@ -357,7 +358,7 @@ class TestUpdateProductImage:
 
         response = client.put(f'/products/{sample_product}/images/{image_id}', json={
             "url": "https://example.com/new.jpg"
-        }, headers={"Authorization": f"Bearer {admin_token}"})
+        }, headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 200
@@ -376,7 +377,7 @@ class TestUpdateProductImage:
             f'/products/{sample_product}/images/{image_id}',
             data={"file": _file("new.jpg")},
             content_type="multipart/form-data",
-            headers={"Authorization": f"Bearer {admin_token}"},
+            headers=auth(client, admin_token),
         )
         data = response.get_json()
 
@@ -389,7 +390,7 @@ class TestUpdateProductImage:
 
         response = client.put(f'/products/{sample_product}/images/{image_id}', json={
             "url": "https://example.com/new.jpg"
-        }, headers={"Authorization": f"Bearer {admin_token}"})
+        }, headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 200
@@ -404,7 +405,7 @@ class TestUpdateProductImage:
         response = client.put(f'/products/{sample_product}/images/{image_id}', json=[
             {"url": "https://example.com/a.jpg"},
             {"url": "https://example.com/b.jpg"},
-        ], headers={"Authorization": f"Bearer {admin_token}"})
+        ], headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 400
@@ -414,7 +415,7 @@ class TestUpdateProductImage:
         """Test updating an image under a non-existent product returns 404."""
         response = client.put('/products/999/images/1', json={
             "url": "https://example.com/new.jpg"
-        }, headers={"Authorization": f"Bearer {admin_token}"})
+        }, headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 404
@@ -426,7 +427,7 @@ class TestUpdateProductImage:
 
         response = client.put(f'/products/{deleted_product}/images/{image_id}', json={
             "url": "https://example.com/new.jpg"
-        }, headers={"Authorization": f"Bearer {admin_token}"})
+        }, headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 404
@@ -436,7 +437,7 @@ class TestUpdateProductImage:
         """Test updating a non-existent image returns 404."""
         response = client.put(f'/products/{sample_product}/images/999', json={
             "url": "https://example.com/new.jpg"
-        }, headers={"Authorization": f"Bearer {admin_token}"})
+        }, headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 404
@@ -448,7 +449,7 @@ class TestUpdateProductImage:
 
         response = client.put(f'/products/{sample_product}/images/{image_id}', json={
             "url": "https://example.com/new.jpg"
-        }, headers={"Authorization": f"Bearer {admin_token}"})
+        }, headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 404
@@ -466,7 +467,7 @@ class TestUpdateProductImage:
 
         response = client.put(f'/products/{sample_product}/images/{image_id}', json={
             "url": "https://example.com/new.jpg"
-        }, headers={"Authorization": f"Bearer {admin_token}"})
+        }, headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 404
@@ -478,7 +479,7 @@ class TestUpdateProductImage:
 
         response = client.put(f'/products/{sample_product}/images/{image_id}', json={
             "url": "   "
-        }, headers={"Authorization": f"Bearer {admin_token}"})
+        }, headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 400
@@ -489,7 +490,7 @@ class TestUpdateProductImage:
         image_id = _add_image(app, sample_product, url="old")
 
         response = client.put(f'/products/{sample_product}/images/{image_id}', json={},
-            headers={"Authorization": f"Bearer {admin_token}"})
+            headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 400
@@ -502,7 +503,7 @@ class TestUpdateProductImage:
         with patch("routes.image.upload_image", side_effect=CloudinaryServiceError("boom")):
             response = client.put(f'/products/{sample_product}/images/{image_id}', json={
                 "url": "https://example.com/new.jpg"
-            }, headers={"Authorization": f"Bearer {admin_token}"})
+            }, headers=auth(client, admin_token))
 
         assert response.status_code == 502
         with app.app_context():
@@ -526,7 +527,7 @@ class TestUpdateProductImage:
 
         response = client.put(f'/products/{sample_product}/images/{image_id}', json={
             "url": "https://example.com/new.jpg"
-        }, headers={"Authorization": f"Bearer {customer_token}"})
+        }, headers=auth(client, customer_token))
         data = response.get_json()
 
         assert response.status_code == 403
@@ -544,7 +545,7 @@ class TestDeleteProductImage:
         image_id = _add_image(app, sample_product, url="img", public_id="products/1/img")
 
         response = client.delete(f'/products/{sample_product}/images/{image_id}',
-            headers={"Authorization": f"Bearer {admin_token}"})
+            headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 200
@@ -564,7 +565,7 @@ class TestDeleteProductImage:
 
         with patch("routes.image.destroy_image", side_effect=CloudinaryServiceError("boom")):
             response = client.delete(f'/products/{sample_product}/images/{image_id}',
-                headers={"Authorization": f"Bearer {admin_token}"})
+                headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 502
@@ -579,7 +580,7 @@ class TestDeleteProductImage:
         image_id = _add_image(app, sample_product, url="img", public_id=None)
 
         response = client.delete(f'/products/{sample_product}/images/{image_id}',
-            headers={"Authorization": f"Bearer {admin_token}"})
+            headers=auth(client, admin_token))
 
         assert response.status_code == 200
         mock_destroy.assert_not_called()
@@ -590,7 +591,7 @@ class TestDeleteProductImage:
         """Test a deleted image no longer appears in the GET listing."""
         image_id = _add_image(app, sample_product, url="img", public_id="products/1/img")
         client.delete(f'/products/{sample_product}/images/{image_id}',
-            headers={"Authorization": f"Bearer {admin_token}"})
+            headers=auth(client, admin_token))
 
         response = client.get(f'/products/{sample_product}/images/')
         data = response.get_json()
@@ -601,7 +602,7 @@ class TestDeleteProductImage:
     def test_delete_image_product_not_found(self, client, admin_token, mock_destroy):
         """Test deleting an image under a non-existent product returns 404."""
         response = client.delete('/products/999/images/1',
-            headers={"Authorization": f"Bearer {admin_token}"})
+            headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 404
@@ -612,7 +613,7 @@ class TestDeleteProductImage:
         image_id = _add_image(app, deleted_product, url="img")
 
         response = client.delete(f'/products/{deleted_product}/images/{image_id}',
-            headers={"Authorization": f"Bearer {admin_token}"})
+            headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 404
@@ -621,7 +622,7 @@ class TestDeleteProductImage:
     def test_delete_image_not_found(self, client, admin_token, sample_product, mock_destroy):
         """Test deleting a non-existent image returns 404."""
         response = client.delete(f'/products/{sample_product}/images/999',
-            headers={"Authorization": f"Bearer {admin_token}"})
+            headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 404
@@ -632,7 +633,7 @@ class TestDeleteProductImage:
         image_id = _add_image(app, sample_product, url="gone", is_deleted=True)
 
         response = client.delete(f'/products/{sample_product}/images/{image_id}',
-            headers={"Authorization": f"Bearer {admin_token}"})
+            headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 404
@@ -651,7 +652,7 @@ class TestDeleteProductImage:
         image_id = _add_image(app, sample_product, url="img")
 
         response = client.delete(f'/products/{sample_product}/images/{image_id}',
-            headers={"Authorization": f"Bearer {customer_token}"})
+            headers=auth(client, customer_token))
         data = response.get_json()
 
         assert response.status_code == 403

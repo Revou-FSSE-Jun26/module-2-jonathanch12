@@ -2,6 +2,7 @@ import pytest
 from flask_jwt_extended import create_access_token
 from app import db
 from models import User, Category, Product, Order, order_items
+from tests._helpers import auth
 
 
 @pytest.fixture
@@ -50,7 +51,7 @@ class TestCreateOrder:
             "order_items": [
                 {"product_id": sample_products[0]["id"], "quantity": 2}
             ]
-        }, headers={"Authorization": f"Bearer {customer_user['token']}"})
+        }, headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 201
@@ -65,7 +66,7 @@ class TestCreateOrder:
             "order_items": [
                 {"product_id": sample_products[0]["id"], "quantity": 3}
             ]
-        }, headers={"Authorization": f"Bearer {customer_user['token']}"})
+        }, headers=auth(client, customer_user['token']))
 
         with app.app_context():
             product = Product.query.get(sample_products[0]["id"])
@@ -78,7 +79,7 @@ class TestCreateOrder:
                 {"product_id": sample_products[0]["id"], "quantity": 2},
                 {"product_id": sample_products[1]["id"], "quantity": 1}
             ]
-        }, headers={"Authorization": f"Bearer {customer_user['token']}"})
+        }, headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         expected_total = (199000 * 2) + (799000 * 1)
@@ -88,7 +89,7 @@ class TestCreateOrder:
     def test_create_order_missing_order_items(self, client, customer_user):
         """Test creating order without order_items returns 400."""
         response = client.post('/orders/', json={},
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 400
@@ -98,7 +99,7 @@ class TestCreateOrder:
         """Test creating order with empty order_items list returns 400."""
         response = client.post('/orders/', json={
             "order_items": []
-        }, headers={"Authorization": f"Bearer {customer_user['token']}"})
+        }, headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 400
@@ -108,7 +109,7 @@ class TestCreateOrder:
         """Test order item without product_id returns 400."""
         response = client.post('/orders/', json={
             "order_items": [{"quantity": 2}]
-        }, headers={"Authorization": f"Bearer {customer_user['token']}"})
+        }, headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 400
@@ -118,7 +119,7 @@ class TestCreateOrder:
         """Test order item without quantity returns 400."""
         response = client.post('/orders/', json={
             "order_items": [{"product_id": sample_products[0]["id"]}]
-        }, headers={"Authorization": f"Bearer {customer_user['token']}"})
+        }, headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 400
@@ -128,7 +129,7 @@ class TestCreateOrder:
         """Test order item with zero or negative quantity returns 400."""
         response = client.post('/orders/', json={
             "order_items": [{"product_id": sample_products[0]["id"], "quantity": 0}]
-        }, headers={"Authorization": f"Bearer {customer_user['token']}"})
+        }, headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 400
@@ -138,7 +139,7 @@ class TestCreateOrder:
         """Test ordering non-existent product returns 404."""
         response = client.post('/orders/', json={
             "order_items": [{"product_id": 999, "quantity": 1}]
-        }, headers={"Authorization": f"Bearer {customer_user['token']}"})
+        }, headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 404
@@ -159,7 +160,7 @@ class TestCreateOrder:
 
         response = client.post('/orders/', json={
             "order_items": [{"product_id": prod_id, "quantity": 1}]
-        }, headers={"Authorization": f"Bearer {customer_user['token']}"})
+        }, headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 404
@@ -169,7 +170,7 @@ class TestCreateOrder:
         """Test ordering more than available stock returns 409."""
         response = client.post('/orders/', json={
             "order_items": [{"product_id": sample_products[0]["id"], "quantity": 9999}]
-        }, headers={"Authorization": f"Bearer {customer_user['token']}"})
+        }, headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 409
@@ -187,7 +188,7 @@ class TestCreateOrder:
         """Test creating order with admin token returns 403."""
         response = client.post('/orders/', json={
             "order_items": [{"product_id": 1, "quantity": 1}]
-        }, headers={"Authorization": f"Bearer {admin_token}"})
+        }, headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 403
@@ -210,10 +211,10 @@ class TestGetOrders:
         # Create an order first
         client.post('/orders/', json={
             "order_items": [{"product_id": sample_products[0]["id"], "quantity": 1}]
-        }, headers={"Authorization": f"Bearer {customer_user['token']}"})
+        }, headers=auth(client, customer_user['token']))
 
         response = client.get('/orders/',
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 200
@@ -226,10 +227,10 @@ class TestGetOrders:
         """Test the response contains orders, pagination metadata, and status."""
         client.post('/orders/', json={
             "order_items": [{"product_id": sample_products[0]["id"], "quantity": 1}]
-        }, headers={"Authorization": f"Bearer {customer_user['token']}"})
+        }, headers=auth(client, customer_user['token']))
 
         response = client.get('/orders/',
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 200
@@ -239,7 +240,7 @@ class TestGetOrders:
 
         pagination = data["pagination"]
         assert pagination["page"] == 1
-        assert pagination["per_page"] == 20
+        assert pagination["per_page"] == 8
         assert pagination["total_items"] == 1
         assert pagination["total_pages"] == 1
         assert pagination["has_next"] is False
@@ -254,7 +255,7 @@ class TestGetOrders:
             db.session.commit()
 
         response = client.get('/orders/',
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 200
@@ -270,7 +271,7 @@ class TestGetOrders:
             db.session.commit()
 
         response = client.get('/orders/',
-            headers={"Authorization": f"Bearer {admin_user['token']}"})
+            headers=auth(client, admin_user['token']))
         data = response.get_json()
 
         assert response.status_code == 200
@@ -285,7 +286,7 @@ class TestGetOrders:
             db.session.commit()
 
         response = client.get('/orders/',
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 200
@@ -300,7 +301,7 @@ class TestGetOrders:
             db.session.commit()
 
         response = client.get('/orders/',
-            headers={"Authorization": f"Bearer {admin_user['token']}"})
+            headers=auth(client, admin_user['token']))
         data = response.get_json()
 
         assert response.status_code == 200
@@ -309,7 +310,7 @@ class TestGetOrders:
     def test_get_orders_empty(self, client, customer_user):
         """Test customer with no orders gets empty list in the envelope."""
         response = client.get('/orders/',
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 200
@@ -329,7 +330,7 @@ class TestGetOrders:
             token = create_access_token(identity="99", additional_claims={"role": "guest"})
 
         response = client.get('/orders/',
-            headers={"Authorization": f"Bearer {token}"})
+            headers=auth(client, token))
         data = response.get_json()
 
         assert response.status_code == 403
@@ -337,8 +338,8 @@ class TestGetOrders:
 
     # ==================== Pagination ====================
 
-    def test_pagination_caps_at_20_per_page(self, app, client, customer_user):
-        """Test the first page returns at most 20 orders when more exist."""
+    def test_pagination_caps_at_8_per_page(self, app, client, customer_user):
+        """Test the first page returns at most 8 orders when more exist."""
         with app.app_context():
             orders = [
                 Order(user_id=customer_user["id"], total_amount=100000 + i, status="pending")
@@ -348,18 +349,18 @@ class TestGetOrders:
             db.session.commit()
 
         response = client.get('/orders/',
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 200
-        assert len(data["orders"]) == 20
+        assert len(data["orders"]) == 8
         assert data["pagination"]["total_items"] == 25
-        assert data["pagination"]["total_pages"] == 2
+        assert data["pagination"]["total_pages"] == 4
         assert data["pagination"]["has_next"] is True
         assert data["pagination"]["has_prev"] is False
 
     def test_pagination_second_page(self, app, client, customer_user):
-        """Test the second page returns the remaining orders."""
+        """Test the second page returns another full page of orders."""
         with app.app_context():
             orders = [
                 Order(user_id=customer_user["id"], total_amount=100000 + i, status="pending")
@@ -369,23 +370,23 @@ class TestGetOrders:
             db.session.commit()
 
         response = client.get('/orders/?page=2',
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 200
-        assert len(data["orders"]) == 5
+        assert len(data["orders"]) == 8
         assert data["pagination"]["page"] == 2
-        assert data["pagination"]["has_next"] is False
+        assert data["pagination"]["has_next"] is True
         assert data["pagination"]["has_prev"] is True
 
     def test_pagination_page_beyond_last_returns_empty(self, app, client, customer_user, sample_products):
         """Test a page past the last page returns an empty list with 200."""
         client.post('/orders/', json={
             "order_items": [{"product_id": sample_products[0]["id"], "quantity": 1}]
-        }, headers={"Authorization": f"Bearer {customer_user['token']}"})
+        }, headers=auth(client, customer_user['token']))
 
         response = client.get('/orders/?page=99',
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 200
@@ -394,7 +395,7 @@ class TestGetOrders:
     def test_pagination_invalid_page_non_integer(self, client, customer_user):
         """Test a non-integer page returns 400."""
         response = client.get('/orders/?page=abc',
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 400
@@ -403,7 +404,7 @@ class TestGetOrders:
     def test_pagination_invalid_page_too_low(self, client, customer_user):
         """Test page < 1 returns 400."""
         response = client.get('/orders/?page=0',
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 400
@@ -421,7 +422,7 @@ class TestGetOrders:
             db.session.commit()
 
         response = client.get('/orders/?status=completed',
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 200
@@ -431,7 +432,7 @@ class TestGetOrders:
     def test_filter_by_invalid_status(self, client, customer_user):
         """Test an invalid status value returns 400."""
         response = client.get('/orders/?status=flying',
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 400
@@ -449,7 +450,7 @@ class TestGetOrders:
             db.session.commit()
 
         response = client.get(f'/orders/?user_id={customer_user["id"]}',
-            headers={"Authorization": f"Bearer {admin_user['token']}"})
+            headers=auth(client, admin_user['token']))
         data = response.get_json()
 
         assert response.status_code == 200
@@ -459,7 +460,7 @@ class TestGetOrders:
     def test_admin_filter_by_invalid_user_id(self, client, admin_user):
         """Test a non-integer user_id returns 400 for admin."""
         response = client.get('/orders/?user_id=abc',
-            headers={"Authorization": f"Bearer {admin_user['token']}"})
+            headers=auth(client, admin_user['token']))
         data = response.get_json()
 
         assert response.status_code == 400
@@ -468,7 +469,7 @@ class TestGetOrders:
     def test_customer_cannot_use_user_id_filter(self, client, customer_user):
         """Test a customer passing user_id gets 403."""
         response = client.get('/orders/?user_id=999',
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 403
@@ -487,7 +488,7 @@ class TestGetOrders:
             db.session.commit()
 
         response = client.get('/orders/?min_amount=100000&max_amount=200000',
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 200
@@ -497,7 +498,7 @@ class TestGetOrders:
     def test_filter_amount_non_numeric(self, client, customer_user):
         """Test a non-numeric min_amount returns 400."""
         response = client.get('/orders/?min_amount=cheap',
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 400
@@ -506,7 +507,7 @@ class TestGetOrders:
     def test_filter_amount_negative(self, client, customer_user):
         """Test a negative amount returns 400."""
         response = client.get('/orders/?min_amount=-10',
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 400
@@ -515,7 +516,7 @@ class TestGetOrders:
     def test_filter_amount_max_less_than_min(self, client, customer_user):
         """Test max_amount less than min_amount returns 400."""
         response = client.get('/orders/?min_amount=200&max_amount=100',
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 400
@@ -539,7 +540,7 @@ class TestGetOrders:
 
         # start and end inclusive: Jan 1 .. Jan 15 should match the first two
         response = client.get('/orders/?start_date=2026-01-01&end_date=2026-01-15',
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 200
@@ -548,7 +549,7 @@ class TestGetOrders:
     def test_filter_invalid_date_format(self, client, customer_user):
         """Test a badly formatted start_date returns 400."""
         response = client.get('/orders/?start_date=01-01-2026',
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 400
@@ -561,14 +562,14 @@ class TestGetOrders:
         # Order containing product 0
         client.post('/orders/', json={
             "order_items": [{"product_id": sample_products[0]["id"], "quantity": 1}]
-        }, headers={"Authorization": f"Bearer {customer_user['token']}"})
+        }, headers=auth(client, customer_user['token']))
         # Order containing product 1
         client.post('/orders/', json={
             "order_items": [{"product_id": sample_products[1]["id"], "quantity": 1}]
-        }, headers={"Authorization": f"Bearer {customer_user['token']}"})
+        }, headers=auth(client, customer_user['token']))
 
         response = client.get(f'/orders/?product_id={sample_products[0]["id"]}',
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 200
@@ -579,7 +580,7 @@ class TestGetOrders:
     def test_filter_invalid_product_id(self, client, customer_user):
         """Test a non-integer product_id returns 400."""
         response = client.get('/orders/?product_id=abc',
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 400
@@ -598,7 +599,7 @@ class TestGetOrderById:
             order_id = order.id
 
         response = client.get(f'/orders/{order_id}',
-            headers={"Authorization": f"Bearer {admin_token}"})
+            headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 200
@@ -614,7 +615,7 @@ class TestGetOrderById:
             order_id = order.id
 
         response = client.get(f'/orders/{order_id}',
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 200
@@ -631,7 +632,7 @@ class TestGetOrderById:
             order_id = order.id
 
         response = client.get(f'/orders/{order_id}',
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 403
@@ -640,7 +641,7 @@ class TestGetOrderById:
     def test_get_order_not_found(self, client, admin_token):
         """Test getting non-existent order returns 404."""
         response = client.get('/orders/999',
-            headers={"Authorization": f"Bearer {admin_token}"})
+            headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 404
@@ -649,7 +650,7 @@ class TestGetOrderById:
     def test_customer_get_nonexistent_order_not_found(self, client, customer_user):
         """Test a customer requesting a non-existent order gets 404."""
         response = client.get('/orders/999',
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 404
@@ -664,7 +665,7 @@ class TestGetOrderById:
             order_id = order.id
 
         response = client.get(f'/orders/{order_id}',
-            headers={"Authorization": f"Bearer {admin_token}"})
+            headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 404
@@ -679,7 +680,7 @@ class TestGetOrderById:
             order_id = order.id
 
         response = client.get(f'/orders/{order_id}',
-            headers={"Authorization": f"Bearer {customer_user['token']}"})
+            headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 404
@@ -701,7 +702,7 @@ class TestGetOrderById:
             token = create_access_token(identity="99", additional_claims={"role": "guest"})
 
         response = client.get(f'/orders/{order_id}',
-            headers={"Authorization": f"Bearer {token}"})
+            headers=auth(client, token))
         data = response.get_json()
 
         assert response.status_code == 403
@@ -723,7 +724,7 @@ class TestUpdateOrder:
 
         response = client.put(f'/orders/{order_id}', json={
             "status": "processing"
-        }, headers={"Authorization": f"Bearer {admin_user['token']}"})
+        }, headers=auth(client, admin_user['token']))
         data = response.get_json()
 
         assert response.status_code == 200
@@ -738,7 +739,7 @@ class TestUpdateOrder:
             db.session.commit()
             order_id = order.id
 
-        headers = {"Authorization": f"Bearer {admin_user['token']}"}
+        headers = auth(client, admin_user['token'])
 
         for expected in ["processing", "delivering", "completed"]:
             response = client.put(f'/orders/{order_id}', json={"status": expected}, headers=headers)
@@ -756,7 +757,7 @@ class TestUpdateOrder:
 
         response = client.put(f'/orders/{order_id}', json={
             "status": "pending"
-        }, headers={"Authorization": f"Bearer {admin_user['token']}"})
+        }, headers=auth(client, admin_user['token']))
         data = response.get_json()
 
         assert response.status_code == 409
@@ -772,7 +773,7 @@ class TestUpdateOrder:
 
         response = client.put(f'/orders/{order_id}', json={
             "status": "delivering"
-        }, headers={"Authorization": f"Bearer {admin_user['token']}"})
+        }, headers=auth(client, admin_user['token']))
         data = response.get_json()
 
         assert response.status_code == 409
@@ -788,7 +789,7 @@ class TestUpdateOrder:
 
         response = client.put(f'/orders/{order_id}', json={
             "status": "cancelled"
-        }, headers={"Authorization": f"Bearer {admin_user['token']}"})
+        }, headers=auth(client, admin_user['token']))
         data = response.get_json()
 
         assert response.status_code == 200
@@ -799,7 +800,7 @@ class TestUpdateOrder:
         # Customer creates an order (reduces stock by 2)
         client.post('/orders/', json={
             "order_items": [{"product_id": sample_products[0]["id"], "quantity": 2}]
-        }, headers={"Authorization": f"Bearer {customer_user['token']}"})
+        }, headers=auth(client, customer_user['token']))
 
         with app.app_context():
             order = Order.query.filter_by(user_id=customer_user["id"]).first()
@@ -810,7 +811,7 @@ class TestUpdateOrder:
         # Admin cancels the order
         response = client.put(f'/orders/{order_id}', json={
             "status": "cancelled"
-        }, headers={"Authorization": f"Bearer {admin_user['token']}"})
+        }, headers=auth(client, admin_user['token']))
 
         assert response.status_code == 200
         with app.app_context():
@@ -828,7 +829,7 @@ class TestUpdateOrder:
             order_id = order.id
 
         response = client.put(f'/orders/{order_id}', json={},
-            headers={"Authorization": f"Bearer {admin_user['token']}"})
+            headers=auth(client, admin_user['token']))
         data = response.get_json()
 
         assert response.status_code == 400
@@ -844,7 +845,7 @@ class TestUpdateOrder:
 
         response = client.put(f'/orders/{order_id}', json={
             "status": "flying"
-        }, headers={"Authorization": f"Bearer {admin_user['token']}"})
+        }, headers=auth(client, admin_user['token']))
         data = response.get_json()
 
         assert response.status_code == 400
@@ -854,7 +855,7 @@ class TestUpdateOrder:
         """Test updating non-existent order returns 404."""
         response = client.put('/orders/999', json={
             "status": "processing"
-        }, headers={"Authorization": f"Bearer {admin_user['token']}"})
+        }, headers=auth(client, admin_user['token']))
         data = response.get_json()
 
         assert response.status_code == 404
@@ -870,7 +871,7 @@ class TestUpdateOrder:
 
         response = client.put(f'/orders/{order_id}', json={
             "status": "processing"
-        }, headers={"Authorization": f"Bearer {admin_user['token']}"})
+        }, headers=auth(client, admin_user['token']))
         data = response.get_json()
 
         assert response.status_code == 409
@@ -886,7 +887,7 @@ class TestUpdateOrder:
 
         response = client.put(f'/orders/{order_id}', json={
             "status": "processing"
-        }, headers={"Authorization": f"Bearer {admin_user['token']}"})
+        }, headers=auth(client, admin_user['token']))
         data = response.get_json()
 
         assert response.status_code == 409
@@ -904,7 +905,7 @@ class TestUpdateOrder:
 
         response = client.put(f'/orders/{order_id}', json={
             "status": "cancelled"
-        }, headers={"Authorization": f"Bearer {customer_user['token']}"})
+        }, headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 200
@@ -920,7 +921,7 @@ class TestUpdateOrder:
 
         response = client.put(f'/orders/{order_id}', json={
             "status": "cancelled"
-        }, headers={"Authorization": f"Bearer {customer_user['token']}"})
+        }, headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 403
@@ -936,7 +937,7 @@ class TestUpdateOrder:
 
         response = client.put(f'/orders/{order_id}', json={
             "status": "processing"
-        }, headers={"Authorization": f"Bearer {customer_user['token']}"})
+        }, headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 403
@@ -952,7 +953,7 @@ class TestUpdateOrder:
 
         response = client.put(f'/orders/{order_id}', json={
             "status": "cancelled"
-        }, headers={"Authorization": f"Bearer {customer_user['token']}"})
+        }, headers=auth(client, customer_user['token']))
         data = response.get_json()
 
         assert response.status_code == 409
@@ -973,7 +974,7 @@ class TestUpdateOrder:
 
         response = client.put('/orders/1', json={
             "status": "processing"
-        }, headers={"Authorization": f"Bearer {token}"})
+        }, headers=auth(client, token))
         data = response.get_json()
 
         assert response.status_code == 403
@@ -992,7 +993,7 @@ class TestDeleteOrder:
             order_id = order.id
 
         response = client.delete(f'/orders/{order_id}',
-            headers={"Authorization": f"Bearer {admin_token}"})
+            headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 200
@@ -1001,7 +1002,7 @@ class TestDeleteOrder:
     def test_delete_order_not_found(self, client, admin_token):
         """Test deleting non-existent order returns 404."""
         response = client.delete('/orders/999',
-            headers={"Authorization": f"Bearer {admin_token}"})
+            headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 404
@@ -1016,7 +1017,7 @@ class TestDeleteOrder:
             order_id = order.id
 
         response = client.delete(f'/orders/{order_id}',
-            headers={"Authorization": f"Bearer {admin_token}"})
+            headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 409
@@ -1031,7 +1032,7 @@ class TestDeleteOrder:
             order_id = order.id
 
         response = client.delete(f'/orders/{order_id}',
-            headers={"Authorization": f"Bearer {admin_token}"})
+            headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 409
@@ -1046,7 +1047,7 @@ class TestDeleteOrder:
     def test_delete_order_non_admin(self, client, customer_token):
         """Test deleting order with customer token returns 403."""
         response = client.delete('/orders/1',
-            headers={"Authorization": f"Bearer {customer_token}"})
+            headers=auth(client, customer_token))
         data = response.get_json()
 
         assert response.status_code == 403

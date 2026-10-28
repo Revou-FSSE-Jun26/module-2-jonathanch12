@@ -46,6 +46,7 @@ python-dotenv==1.2.2
 python-engineio==4.13.5
 python-socketio==5.16.4
 pywin32==312; platform_system == "Windows"
+PyYAML==6.0.3
 pyzmq==27.2.0
 requests==2.34.2
 simple-websocket==1.1.0

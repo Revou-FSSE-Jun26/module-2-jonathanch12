@@ -3,16 +3,22 @@ from unittest.mock import patch
 from flask_jwt_extended import create_access_token
 from app import db
 from models import User
+from tests._helpers import auth
 
 
-def _auth_header(app, user_id, role="customer"):
-    """Build an Authorization header with a JWT for the given user id."""
-    with app.app_context():
+def _auth_header(client, user_id, role="customer"):
+    """Authenticate the test client for the given user id via JWT cookie + CSRF.
+
+    JWTs now travel in HttpOnly cookies rather than the Authorization header.
+    This mints a token, sets it on the client's cookie jar, and returns the
+    X-CSRF-TOKEN header the backend requires on state-changing requests.
+    """
+    with client.application.app_context():
         token = create_access_token(
             identity=str(user_id),
             additional_claims={"role": role}
         )
-    return {"Authorization": f"Bearer {token}"}
+        return auth(client, token)
 
 
 class TestRegisterRoute:
@@ -226,7 +232,7 @@ class TestGetUserDataRoute:
 
     def test_get_user_data_authenticated(self, app, client, sample_user):
         # Test authenticated user retrieves their own data returns 200.
-        headers = _auth_header(app, sample_user["id"], sample_user["role"])
+        headers = _auth_header(client, sample_user["id"], sample_user["role"])
         response = client.get('/users/', headers=headers)
         data = response.get_json()
 
@@ -250,7 +256,7 @@ class TestGetUserDataRoute:
 
     def test_get_user_data_user_not_found(self, app, client):
         # Test token for a non-existent user returns 404.
-        headers = _auth_header(app, 99999)
+        headers = _auth_header(client, 99999)
         response = client.get('/users/', headers=headers)
         data = response.get_json()
 
@@ -262,7 +268,7 @@ class TestGetUserDataRoute:
 
     def test_get_user_data_server_error(self, app, client, sample_user):
         # Test retrieval returns 500 when a database error occurs.
-        headers = _auth_header(app, sample_user["id"], sample_user["role"])
+        headers = _auth_header(client, sample_user["id"], sample_user["role"])
         with patch('routes.user.User.query') as mock_query:
             mock_query.get.side_effect = Exception("Database error")
 
@@ -281,7 +287,7 @@ class TestUpdateUserDataRoute:
 
     def test_update_single_field(self, app, client, sample_user):
         # Test updating a single field returns 200 and persists the change.
-        headers = _auth_header(app, sample_user["id"], sample_user["role"])
+        headers = _auth_header(client, sample_user["id"], sample_user["role"])
         response = client.put('/users/', headers=headers, json={
             "name": "Updated Name"
         })
@@ -298,7 +304,7 @@ class TestUpdateUserDataRoute:
 
     def test_update_multiple_fields(self, app, client, sample_user):
         # Test updating name, phone, and address together returns 200.
-        headers = _auth_header(app, sample_user["id"], sample_user["role"])
+        headers = _auth_header(client, sample_user["id"], sample_user["role"])
         response = client.put('/users/', headers=headers, json={
             "name": "Multi Update",
             "phone": "9876543210",
@@ -317,7 +323,7 @@ class TestUpdateUserDataRoute:
 
     def test_update_password_is_hashed(self, app, client, sample_user):
         # Test updating the password stores a bcrypt hash, not plaintext.
-        headers = _auth_header(app, sample_user["id"], sample_user["role"])
+        headers = _auth_header(client, sample_user["id"], sample_user["role"])
         response = client.put('/users/', headers=headers, json={
             "password": "newsecurepass123"
         })
@@ -331,7 +337,7 @@ class TestUpdateUserDataRoute:
 
     def test_update_leaves_absent_fields_unchanged(self, app, client, sample_user):
         # Test fields not present in the body are left unchanged.
-        headers = _auth_header(app, sample_user["id"], sample_user["role"])
+        headers = _auth_header(client, sample_user["id"], sample_user["role"])
         response = client.put('/users/', headers=headers, json={
             "name": "Only Name Changed"
         })
@@ -348,7 +354,7 @@ class TestUpdateUserDataRoute:
 
     def test_update_empty_body(self, app, client, sample_user):
         # Test update with empty body returns 400.
-        headers = _auth_header(app, sample_user["id"], sample_user["role"])
+        headers = _auth_header(client, sample_user["id"], sample_user["role"])
         response = client.put('/users/', headers=headers, json={})
         data = response.get_json()
 
@@ -358,7 +364,7 @@ class TestUpdateUserDataRoute:
 
     def test_update_disallowed_field_email(self, app, client, sample_user):
         # Test updating a disallowed field (email) returns 400.
-        headers = _auth_header(app, sample_user["id"], sample_user["role"])
+        headers = _auth_header(client, sample_user["id"], sample_user["role"])
         response = client.put('/users/', headers=headers, json={
             "email": "newemail@example.com"
         })
@@ -371,7 +377,7 @@ class TestUpdateUserDataRoute:
 
     def test_update_disallowed_field_role(self, app, client, sample_user):
         # Test updating a disallowed field (role) returns 400.
-        headers = _auth_header(app, sample_user["id"], sample_user["role"])
+        headers = _auth_header(client, sample_user["id"], sample_user["role"])
         response = client.put('/users/', headers=headers, json={
             "role": "admin"
         })
@@ -383,7 +389,7 @@ class TestUpdateUserDataRoute:
 
     def test_update_name_not_string(self, app, client, sample_user):
         # Test update with non-string name returns 400.
-        headers = _auth_header(app, sample_user["id"], sample_user["role"])
+        headers = _auth_header(client, sample_user["id"], sample_user["role"])
         response = client.put('/users/', headers=headers, json={
             "name": 12345
         })
@@ -395,7 +401,7 @@ class TestUpdateUserDataRoute:
 
     def test_update_name_empty(self, app, client, sample_user):
         # Test update with whitespace-only name returns 400.
-        headers = _auth_header(app, sample_user["id"], sample_user["role"])
+        headers = _auth_header(client, sample_user["id"], sample_user["role"])
         response = client.put('/users/', headers=headers, json={
             "name": "   "
         })
@@ -407,7 +413,7 @@ class TestUpdateUserDataRoute:
 
     def test_update_phone_not_string(self, app, client, sample_user):
         # Test update with non-string phone returns 400.
-        headers = _auth_header(app, sample_user["id"], sample_user["role"])
+        headers = _auth_header(client, sample_user["id"], sample_user["role"])
         response = client.put('/users/', headers=headers, json={
             "phone": 1234567890
         })
@@ -419,7 +425,7 @@ class TestUpdateUserDataRoute:
 
     def test_update_phone_empty(self, app, client, sample_user):
         # Test update with empty phone returns 400.
-        headers = _auth_header(app, sample_user["id"], sample_user["role"])
+        headers = _auth_header(client, sample_user["id"], sample_user["role"])
         response = client.put('/users/', headers=headers, json={
             "phone": ""
         })
@@ -431,7 +437,7 @@ class TestUpdateUserDataRoute:
 
     def test_update_address_empty(self, app, client, sample_user):
         # Test update with whitespace-only address returns 400.
-        headers = _auth_header(app, sample_user["id"], sample_user["role"])
+        headers = _auth_header(client, sample_user["id"], sample_user["role"])
         response = client.put('/users/', headers=headers, json={
             "address": "  "
         })
@@ -443,7 +449,7 @@ class TestUpdateUserDataRoute:
 
     def test_update_password_empty(self, app, client, sample_user):
         # Test update with whitespace-only password returns 400.
-        headers = _auth_header(app, sample_user["id"], sample_user["role"])
+        headers = _auth_header(client, sample_user["id"], sample_user["role"])
         response = client.put('/users/', headers=headers, json={
             "password": "        "
         })
@@ -455,7 +461,7 @@ class TestUpdateUserDataRoute:
 
     def test_update_password_too_short(self, app, client, sample_user):
         # Test update with password shorter than 8 characters returns 400.
-        headers = _auth_header(app, sample_user["id"], sample_user["role"])
+        headers = _auth_header(client, sample_user["id"], sample_user["role"])
         response = client.put('/users/', headers=headers, json={
             "password": "short"
         })
@@ -477,7 +483,7 @@ class TestUpdateUserDataRoute:
 
     def test_update_user_not_found(self, app, client):
         # Test token for a non-existent user returns 404.
-        headers = _auth_header(app, 99999)
+        headers = _auth_header(client, 99999)
         response = client.put('/users/', headers=headers, json={
             "name": "Ghost User"
         })
@@ -491,7 +497,7 @@ class TestUpdateUserDataRoute:
 
     def test_update_server_error(self, app, client, sample_user):
         # Test update returns 500 when a database error occurs.
-        headers = _auth_header(app, sample_user["id"], sample_user["role"])
+        headers = _auth_header(client, sample_user["id"], sample_user["role"])
         with patch('routes.user.db.session.commit', side_effect=Exception("Database error")):
             response = client.put('/users/', headers=headers, json={
                 "name": "Will Fail"

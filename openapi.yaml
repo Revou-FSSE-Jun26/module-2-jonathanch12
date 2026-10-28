@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: RevoShop E-Commerce API
+  title: KINETIC E-Commerce API
   version: "1.0.0"
   description: |
     REST API for a Flask-based e-commerce backend.
@@ -11,23 +11,39 @@ info:
 
     ## Authentication
     Most write operations and all order/payment endpoints require a JWT access
-    token obtained from `POST /auth/login`. Pass it as:
-
-        Authorization: Bearer <access_token>
+    token obtained from `POST /auth/login`. Tokens are delivered as **HttpOnly
+    cookies**, not in the response body: login sets `access_token_cookie` and
+    `refresh_token_cookie`. Because they are HttpOnly, JavaScript cannot read
+    them (protecting against XSS token theft), and the browser attaches them
+    automatically — clients must send requests with credentials enabled
+    (`fetch(..., { credentials: "include" })` / `axios` `withCredentials: true`).
+    Do not set an `Authorization` header; tokens are read from the cookies.
 
     The access token carries a `role` claim (`admin` or `customer`) that is used
     for authorization. Access tokens expire after 1 hour; refresh tokens after
-    7 days. Use `POST /auth/refresh` with the refresh token to obtain a new
-    access token without re-sending credentials.
+    7 days. Use `POST /auth/refresh` to obtain a new access token without
+    re-sending credentials (the refresh cookie is sent automatically).
+
+    ## CSRF protection
+    Cookie-based auth is combined with double-submit CSRF protection. On login
+    (and refresh), the server also sets **readable** `csrf_access_token` and
+    `csrf_refresh_token` cookies. On every state-changing request
+    (`POST`/`PUT`/`DELETE`) to a protected endpoint, the client must read the
+    relevant CSRF cookie and echo its value back in the `X-CSRF-TOKEN` header.
+    Requests to a protected endpoint without the matching header are rejected
+    with `401`. `GET` requests are not CSRF-checked. The `/auth/refresh`
+    endpoint requires the refresh CSRF token (`csrf_refresh_token`).
 
     ## Logout
-    There is no logout endpoint. JWTs are stateless and are not tracked
-    server-side, so the server cannot invalidate a token on demand. Logout is
-    handled entirely on the client by discarding the stored access and refresh
-    tokens. Any already-issued token remains valid until it expires (access
-    token up to 1 hour, refresh token up to 7 days). If true server-side
-    revocation is ever required, it would need a token blocklist (and is not
-    currently implemented).
+    `POST /auth/logout` clears the JWT cookies (and their CSRF counterparts) by
+    unsetting them. Because the token lives in an HttpOnly cookie the client
+    cannot delete itself, the server must do it. The endpoint requires no token
+    so a client can always end its session. JWTs remain otherwise stateless and
+    are not tracked server-side, so any already-issued token stays valid until
+    it expires (access token up to 1 hour, refresh token up to 7 days) — this
+    endpoint clears the browser's cookies rather than revoking the token. True
+    server-side revocation would require a token blocklist, which is not
+    currently implemented.
 
     ## Roles
     - **admin**: manages catalog (products, categories, images), can view/update/delete any order.
@@ -51,9 +67,10 @@ tags:
     description: Utility / health endpoints
   - name: Auth
     description: |
-      Authentication. Login returns an access token (1h) and refresh token (7d);
-      use `/auth/refresh` to renew the access token. Logout is client-side only
-      (discard the tokens) — there is no server-side token revocation.
+      Authentication. Login sets the access token (1h) and refresh token (7d)
+      as HttpOnly cookies; use `/auth/refresh` to renew the access token and
+      `/auth/logout` to clear the cookies. CSRF protection is enabled, so
+      state-changing requests must send the `X-CSRF-TOKEN` header.
   - name: Users
     description: User registration and self-service profile management
   - name: Products
@@ -91,7 +108,13 @@ paths:
   /auth/login:
     post:
       tags: [Auth]
-      summary: Log in and obtain JWT tokens
+      summary: Log in; sets JWT tokens as HttpOnly cookies
+      description: |
+        On success, sets four cookies: the HttpOnly `access_token_cookie`
+        (valid 1 hour) and `refresh_token_cookie` (valid 7 days), plus the
+        readable `csrf_access_token` and `csrf_refresh_token` the client must
+        echo back in the `X-CSRF-TOKEN` header on state-changing requests. The
+        tokens are not returned in the response body.
       security: []
       requestBody:
         required: true
@@ -111,7 +134,15 @@ paths:
                   example: secretpassword
       responses:
         "200":
-          description: Login successful
+          description: |
+            Login successful. JWT and CSRF cookies are set via `Set-Cookie`.
+          headers:
+            Set-Cookie:
+              description: |
+                Sets `access_token_cookie` (HttpOnly), `refresh_token_cookie`
+                (HttpOnly), `csrf_access_token`, and `csrf_refresh_token`.
+              schema:
+                type: string
           content:
             application/json:
               schema:
@@ -123,12 +154,6 @@ paths:
                   name:
                     type: string
                     example: Jane Doe
-                  access_token:
-                    type: string
-                    description: JWT access token (valid 1 hour)
-                  refresh_token:
-                    type: string
-                    description: JWT refresh token (valid 7 days)
                   expires_in:
                     type: integer
                     description: Access token lifetime in seconds
@@ -158,28 +183,32 @@ paths:
   /auth/refresh:
     post:
       tags: [Auth]
-      summary: Obtain a new access token using a refresh token
+      summary: Obtain a new access token using the refresh cookie
       description: |
-        Exchanges a valid refresh token for a new short-lived access token.
-        Send the refresh token (not the access token) in the Authorization
-        header:
-
-            Authorization: Bearer <refresh_token>
-
-        The new access token preserves the user's `role` claim.
+        Exchanges a valid refresh token for a new short-lived access token. The
+        refresh token is read from the HttpOnly `refresh_token_cookie` (sent
+        automatically by the browser), so no Authorization header is used. With
+        CSRF protection enabled, the request must carry the refresh CSRF token
+        (from the `csrf_refresh_token` cookie) in the `X-CSRF-TOKEN` header. The
+        new access token is returned as an updated `access_token_cookie` and
+        preserves the user's `role` claim.
       security:
-        - refreshAuth: []
+        - refreshCookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
       responses:
         "200":
-          description: New access token issued
+          description: New access token issued (set as `access_token_cookie`)
+          headers:
+            Set-Cookie:
+              description: Sets a refreshed `access_token_cookie` (HttpOnly) and `csrf_access_token`.
+              schema:
+                type: string
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  access_token:
-                    type: string
-                    description: JWT access token (valid 1 hour)
                   expires_in:
                     type: integer
                     description: Access token lifetime in seconds
@@ -188,7 +217,7 @@ paths:
                     type: string
                     example: ok
         "401":
-          description: Missing, invalid, or expired refresh token
+          description: Missing/invalid/expired refresh cookie, or missing/invalid CSRF header
           content:
             application/json:
               schema:
@@ -205,6 +234,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Log out; clears the JWT and CSRF cookies
+      description: |
+        Unsets the `access_token_cookie`, `refresh_token_cookie`, and their
+        CSRF counterparts by re-sending them with empty values and an immediate
+        expiry. Requires no token, so a client can always end its session.
+      security: []
+      responses:
+        "200":
+          description: Logout successful; cookies cleared via `Set-Cookie`
+          headers:
+            Set-Cookie:
+              description: Clears the JWT and CSRF cookies.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
 
   /users/:
     post:
@@ -1590,21 +1641,37 @@ paths:
 components:
   securitySchemes:
     bearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
+      type: apiKey
+      in: cookie
+      name: access_token_cookie
       description: |
-        JWT access token obtained from `POST /auth/login` or `POST /auth/refresh`.
-        The token embeds a `role` claim used for authorization. Valid for 1 hour.
-    refreshAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
+        JWT access token delivered as an HttpOnly cookie by `POST /auth/login`
+        (and refreshed by `POST /auth/refresh`). Sent automatically by the
+        browser on credentialed requests; JavaScript cannot read it. The token
+        embeds a `role` claim used for authorization and is valid for 1 hour.
+        State-changing requests must also send the `X-CSRF-TOKEN` header (see
+        the CSRF protection section).
+    refreshCookieAuth:
+      type: apiKey
+      in: cookie
+      name: refresh_token_cookie
       description: |
-        JWT refresh token obtained from `POST /auth/login`. Used only against
-        `POST /auth/refresh` to obtain a new access token. Valid for 7 days.
+        JWT refresh token delivered as an HttpOnly cookie by `POST /auth/login`.
+        Sent automatically to `POST /auth/refresh` to obtain a new access token.
+        Valid for 7 days. The refresh request must also carry the refresh CSRF
+        token in the `X-CSRF-TOKEN` header.
 
   parameters:
+    CsrfHeader:
+      name: X-CSRF-TOKEN
+      in: header
+      required: true
+      schema:
+        type: string
+      description: |
+        Double-submit CSRF token. Read from the `csrf_access_token` cookie (or
+        `csrf_refresh_token` for `/auth/refresh`) and echoed back here on
+        state-changing requests.
     CategoryId:
       name: category_id
       in: path
@@ -1687,13 +1754,13 @@ components:
           example: 1
         per_page:
           type: integer
-          example: 20
+          example: 8
         total_items:
           type: integer
           example: 57
         total_pages:
           type: integer
-          example: 3
+          example: 8
         has_next:
           type: boolean
         has_prev:

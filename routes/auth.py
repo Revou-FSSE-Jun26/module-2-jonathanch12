@@ -5,6 +5,9 @@ from flask_jwt_extended import (
     jwt_required,
     get_jwt,
     get_jwt_identity,
+    set_access_cookies,
+    set_refresh_cookies,
+    unset_jwt_cookies,
 )
 from models import User
 from datetime import timedelta
@@ -51,23 +54,31 @@ def login_user():
         access_token = create_access_token(identity=str(user.id), additional_claims=additional_claims)
         refresh_token = create_refresh_token(identity=str(user.id), additional_claims=additional_claims)
 
-        return jsonify({
+        # Tokens are delivered as HttpOnly cookies rather than in the body, so
+        # JavaScript can never read them (XSS protection). The response body
+        # carries only non-sensitive data. With CSRF protection enabled,
+        # set_*_cookies also emits readable csrf_* cookies the front-end must
+        # echo back via the X-CSRF-TOKEN header on state-changing requests.
+        response = jsonify({
             "message": "Login successful",
             "name": user.name,
-            "access_token": access_token,
-            "refresh_token": refresh_token,
             "expires_in": _access_token_expires_in(),
             "status": "ok"
-        }), 200
+        })
+        set_access_cookies(response, access_token)
+        set_refresh_cookies(response, refresh_token)
+        return response, 200
     except Exception as e:
         print(f"Error logging in: {e}")
         return jsonify({"message": "Login error", "status": "error"}), 500
 
 
 # Refresh access token (POST)
-# Requires a valid refresh token in the Authorization header:
-#   Authorization: Bearer <refresh_token>
-# Issues a new short-lived access token, re-attaching the user's role claim.
+# Requires a valid refresh token delivered via the HttpOnly refresh cookie
+# (sent automatically by the browser to this endpoint). With CSRF protection
+# enabled, the request must also carry the refresh CSRF token in the
+# X-CSRF-TOKEN header. Issues a new short-lived access token as a cookie,
+# re-attaching the user's role claim.
 @auth_bp.route('/refresh', methods=['POST'])
 @jwt_required(refresh=True)
 def refresh():
@@ -78,11 +89,23 @@ def refresh():
             identity=identity,
             additional_claims={"role": role}
         )
-        return jsonify({
-            "access_token": access_token,
+        response = jsonify({
             "expires_in": _access_token_expires_in(),
             "status": "ok"
-        }), 200
+        })
+        set_access_cookies(response, access_token)
+        return response, 200
     except Exception as e:
         print(f"Error refreshing token: {e}")
         return jsonify({"message": "Token refresh error", "status": "error"}), 500
+
+
+# Logout user (POST)
+# Clears the JWT cookies (and their CSRF counterparts). Because the token now
+# lives in an HttpOnly cookie the front-end cannot delete itself, the server
+# must unset it. No token is required so a client can always end its session.
+@auth_bp.route('/logout', methods=['POST'])
+def logout():
+    response = jsonify({"message": "Logout successful", "status": "ok"})
+    unset_jwt_cookies(response)
+    return response, 200

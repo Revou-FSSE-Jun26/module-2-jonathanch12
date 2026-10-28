@@ -1,6 +1,6 @@
-# RevoShop — A Simple e-Commerce Backend [IN DEVELOPMENT]
+# KINETIC — A Simple e-Commerce Backend [IN DEVELOPMENT]
 
-RevoShop is a backend API for an online retail store, built with Flask and PostgreSQL. It provides RESTful endpoints for managing users, products, product images, categories, orders, and payments, with JWT-based authentication and role-based access control (admin/customer). Product images are stored on Cloudinary, and payments are processed through the Midtrans payment gateway.
+KINETIC is a backend API for an online retail store, built with Flask and PostgreSQL. It provides RESTful endpoints for managing users, products, product images, categories, orders, and payments, with JWT-based authentication and role-based access control (admin/customer). Product images are stored on Cloudinary, and payments are processed through the Midtrans payment gateway.
 
 ---
 
@@ -76,15 +76,17 @@ module-2-jonathanch12/
 │   ├── __init__.py                             # Blueprint exports
 │   ├── main.py                                 # Home/health check route
 │   ├── user.py                                 # User registration and retrieval
-│   ├── auth.py                                 # Login (JWT token generation) and access-token refresh
+│   ├── auth.py                                 # Login/logout (JWT cookie issuing) and access-token refresh
 │   ├── product.py                              # Product CRUD (admin-protected)
 │   ├── image.py                                # Product image CRUD via Cloudinary (admin-protected writes, public reads)
 │   ├── category.py                             # Category CRUD (admin-protected)
 │   ├── order.py                                # Order creation and management
 │   └── payment.py                              # Payment creation, Midtrans webhook, and payment reads
 ├── tests/
+│   ├── __init__.py                             # Marks tests as a package
 │   ├── conftest.py                             # Pytest fixtures (app, client, tokens)
-│   ├── test_auth.py                            # Login route tests
+│   ├── _helpers.py                             # auth() helper: sets the JWT cookie + CSRF header on the test client
+│   ├── test_auth.py                            # Login, refresh, and logout route tests
 │   ├── test_user.py                            # Registration route tests
 │   ├── test_category.py                        # Category route tests
 │   ├── test_product.py                         # Product route tests
@@ -175,9 +177,12 @@ CLOUDINARY_CLOUD_NAME="your-cloudinary-cloud-name"
 CLOUDINARY_API_KEY="your-cloudinary-api-key"
 CLOUDINARY_API_SECRET="your-cloudinary-api-secret"
 FRONTEND_ORIGINS="http://localhost:3000"
+JWT_COOKIE_SECURE="true"
 ```
 
 `FRONTEND_ORIGINS` is a comma-separated list of origins allowed by CORS (the front-end app runs on a separate origin). Include every origin the front end is served from, for example `http://localhost:3000,https://your-frontend.vercel.app`. If unset, it defaults to `http://localhost:3000`.
+
+`JWT_COOKIE_SECURE` controls whether the JWT cookies are marked `Secure` (HTTPS-only). It defaults to `true` and should stay `true` in any deployed (HTTPS) environment. Set it to `false` only for plain-HTTP local development — but because the cookies use `SameSite=None`, browsers still require `Secure`, so cross-origin browser testing should be done over HTTPS.
 
 Generate the JWT secret key:
 
@@ -224,8 +229,9 @@ The app will be available at `http://127.0.0.1:5000`.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/auth/login` | Login (returns JWT access and refresh tokens) |
-| POST | `/auth/refresh` | Exchange a refresh token for a new access token |
+| POST | `/auth/login` | Login (sets JWT access and refresh tokens as HttpOnly cookies) |
+| POST | `/auth/refresh` | Exchange the refresh cookie for a new access-token cookie |
+| POST | `/auth/logout` | Clear the JWT and CSRF cookies |
 | POST | `/users/` | Register a new user |
 | GET | `/users` | View user's personal data |
 | PUT | `/users` | Update user's personal data (name, password, phone, address) |
@@ -313,11 +319,14 @@ Product images are stored on [Cloudinary](https://cloudinary.com/) rather than i
 
 ### Request examples
 
+These are admin-only, state-changing requests, so they send the JWT cookies (set at login) and the CSRF token in the `X-CSRF-TOKEN` header.
+
 Upload files:
 
 ```bash
-curl -X POST http://127.0.0.1:5000/products/1/images/ \
-  -H "Authorization: Bearer <admin_access_token>" \
+curl -X POST https://api.example.com/products/1/images/ \
+  --cookie "access_token_cookie=<admin_access_jwt>; csrf_access_token=<csrf>" \
+  -H "X-CSRF-TOKEN: <csrf>" \
   -F "file=@./mouse-front.jpg" \
   -F "file=@./mouse-side.jpg"
 ```
@@ -325,8 +334,9 @@ curl -X POST http://127.0.0.1:5000/products/1/images/ \
 Upload by remote URL(s):
 
 ```bash
-curl -X POST http://127.0.0.1:5000/products/1/images/ \
-  -H "Authorization: Bearer <admin_access_token>" \
+curl -X POST https://api.example.com/products/1/images/ \
+  --cookie "access_token_cookie=<admin_access_jwt>; csrf_access_token=<csrf>" \
+  -H "X-CSRF-TOKEN: <csrf>" \
   -H "Content-Type: application/json" \
   -d '[{"url": "https://example.com/mouse-front.jpg"}, {"url": "https://example.com/mouse-side.jpg"}]'
 ```
@@ -359,52 +369,98 @@ The `status` column stores the raw Midtrans `transaction_status` for accurate re
 
 ## Authentication
 
-The API uses JWT (JSON Web Tokens) for authentication. Tokens carry a `role` claim (`admin` or `customer`) that drives role-based access control.
+The API uses JWT (JSON Web Tokens) for authentication, delivered as **HttpOnly cookies** rather than in the response body. Tokens carry a `role` claim (`admin` or `customer`) that drives role-based access control.
+
+### Why HttpOnly cookies
+
+Because the cookies are `HttpOnly`, JavaScript cannot read them (`document.cookie` won't expose them), which protects the token against theft via XSS. The frontend never handles the token directly — the browser stores it and attaches it automatically. The tradeoff is CSRF exposure (the browser sends the cookie on any request to the API), which is why CSRF protection is enabled (see below).
+
+Since the frontend and backend run on separate origins, the cookies are issued with `SameSite=None` and `Secure`, so **HTTPS is required** in any deployed environment. For plain-HTTP local development you can set `JWT_COOKIE_SECURE=false` in `.env`, but note that browsers reject a `SameSite=None` cookie without `Secure`, so cross-origin browser testing is best done over HTTPS.
+
+### Sending requests from the frontend
+
+The frontend must opt into sending cookies on every request — it does **not** set an `Authorization` header:
+
+```js
+// fetch
+fetch("https://api.example.com/orders/", { credentials: "include" });
+
+// axios
+axios.get("/orders/", { withCredentials: true });
+```
+
+### CSRF protection
+
+Cookie auth is paired with double-submit CSRF protection. On login (and refresh), the server also sets **readable** `csrf_access_token` and `csrf_refresh_token` cookies. On every state-changing request (`POST`/`PUT`/`DELETE`) to a protected endpoint, the frontend must read the relevant CSRF cookie and send its value back in the `X-CSRF-TOKEN` header:
+
+```js
+function getCookie(name) {
+  return document.cookie.split("; ").find(c => c.startsWith(name + "="))?.split("=")[1];
+}
+
+fetch("https://api.example.com/orders/", {
+  method: "POST",
+  credentials: "include",
+  headers: {
+    "Content-Type": "application/json",
+    "X-CSRF-TOKEN": getCookie("csrf_access_token"),
+  },
+  body: JSON.stringify({ order_items: [{ product_id: 1, quantity: 2 }] }),
+});
+```
+
+`GET` requests are not CSRF-checked. A protected state-changing request without the matching CSRF header is rejected with `401`.
 
 ### Login
 
-`POST /auth/login` with an email and password returns two tokens:
-
-- **Access token** — short-lived (1 hour), sent with every protected request.
-- **Refresh token** — long-lived (7 days), used only to obtain a new access token.
+`POST /auth/login` with an email and password sets the JWT cookies and returns only non-sensitive data in the body:
 
 ```json
 {
   "message": "Login successful",
   "name": "Sarah Tan",
-  "access_token": "<jwt_access_token>",
-  "refresh_token": "<jwt_refresh_token>",
+  "expires_in": 3600,
   "status": "ok"
 }
 ```
 
-Include the access token in the `Authorization` header on protected requests:
+On success the server sends four cookies via `Set-Cookie`:
 
-```
-Authorization: Bearer <access_token>
-```
+- **`access_token_cookie`** (HttpOnly) — short-lived access token (1 hour).
+- **`refresh_token_cookie`** (HttpOnly) — long-lived refresh token (7 days), scoped to `/auth/refresh`.
+- **`csrf_access_token`** / **`csrf_refresh_token`** (readable) — CSRF tokens the frontend echoes back in `X-CSRF-TOKEN`.
 
 ### Refreshing the access token
 
-When the access token expires, call `POST /auth/refresh` with the **refresh token** (not the access token) in the `Authorization` header to get a new access token — no need to re-send credentials. The new access token preserves the user's `role` claim.
+When the access token expires, call `POST /auth/refresh`. The refresh cookie is sent automatically by the browser (no `Authorization` header), and the request must include the refresh CSRF token in the `X-CSRF-TOKEN` header. The response sets a new `access_token_cookie` that preserves the user's `role` claim.
 
 ```bash
-curl -X POST http://127.0.0.1:5000/auth/refresh \
-  -H "Authorization: Bearer <refresh_token>"
+curl -X POST https://api.example.com/auth/refresh \
+  --cookie "refresh_token_cookie=<refresh_jwt>; csrf_refresh_token=<csrf>" \
+  -H "X-CSRF-TOKEN: <csrf>"
 ```
 
 ```json
 {
-  "access_token": "<new_jwt_access_token>",
+  "expires_in": 3600,
   "status": "ok"
 }
 ```
 
-Sending an access token to this endpoint (instead of a refresh token) is rejected with `422`; a missing, expired, or invalid token returns `401`.
+A missing/invalid/expired refresh cookie or a missing/invalid CSRF header returns `401`; sending an access token instead of a refresh token returns `422`.
 
 ### Logout
 
-There is no logout endpoint. JWTs are stateless and are not tracked server-side, so the server cannot invalidate a token on demand. Logout is handled on the client by discarding the stored access and refresh tokens. Any token that was already issued remains valid until it expires (access token up to 1 hour, refresh token up to 7 days). True server-side revocation would require a token blocklist, which is not currently implemented.
+`POST /auth/logout` clears the JWT and CSRF cookies by unsetting them (re-sending them empty with an immediate expiry). Because the token lives in an HttpOnly cookie the frontend cannot delete itself, the server must do it. The endpoint requires no token, so a client can always end its session.
+
+```json
+{
+  "message": "Logout successful",
+  "status": "ok"
+}
+```
+
+JWTs are otherwise stateless and are not tracked server-side, so an already-issued token stays technically valid until it expires — logout clears the browser's cookies rather than revoking the token. True server-side revocation would require a token blocklist, which is not currently implemented.
 
 - User roles: `admin`, `customer`.
 
@@ -432,9 +488,11 @@ pytest tests/ --cov=routes --cov-report=term-missing
 
 Test coverage per route file:
 
+Protected-route tests authenticate via the `auth()` helper in `tests/_helpers.py`, which sets the JWT access cookie on the test client and supplies the `X-CSRF-TOKEN` header (mirroring how a browser behaves) instead of an `Authorization` header.
+
 | Test file | Covers |
 |-----------|--------|
-| `test_auth.py` | Login and JWT token generation |
+| `test_auth.py` | Login (sets JWT + CSRF cookies), token refresh (cookie + CSRF header), logout (clears cookies) |
 | `test_user.py` | User registration and validation |
 | `test_category.py` | Category CRUD with admin role checks |
 | `test_product.py` | Product CRUD, validation, and soft deletion |
@@ -482,4 +540,8 @@ https://revoshop-flask.vercel.app/
 
 ---
 
-Disclaimer: RevoShop is a portfolio project created for educational and demonstration purposes only. It is not an actual commercial store, and no items are available for real purchase. All trademarks, logos, and product imagery belong to their respective owners.
+Origin: This project was initially named as `RevoShop`, but a renaming was held to keep it aligned with the dummy products catalogue. The current name of the project is `KINETIC`.
+
+---
+
+Disclaimer: KINETIC is a portfolio project created for educational and demonstration purposes only. It is not an actual commercial store, and no items are available for real purchase. All trademarks, logos, and product imagery belong to their respective owners.

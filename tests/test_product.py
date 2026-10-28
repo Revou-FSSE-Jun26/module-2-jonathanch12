@@ -1,6 +1,7 @@
 import pytest
 from app import db
 from models import Category, Product, Order, order_items
+from tests._helpers import auth
 
 
 class TestGetProducts:
@@ -26,7 +27,7 @@ class TestGetProducts:
         assert len(data["products"]) == 2
         assert data["pagination"]["total_items"] == 2
         assert data["pagination"]["page"] == 1
-        assert data["pagination"]["per_page"] == 20
+        assert data["pagination"]["per_page"] == 8
         names = [p["name"] for p in data["products"]]
         assert "Mouse" in names
         assert "Keyboard" in names
@@ -43,7 +44,7 @@ class TestGetProducts:
         assert data["pagination"]["total_pages"] == 0
 
     def test_pagination_second_page(self, app, client):
-        """Test pagination returns 20 per page and correct items on page 2."""
+        """Test pagination returns 8 per page and correct items on page 2."""
         with app.app_context():
             category = Category(name="Electronics", description="Gadgets")
             db.session.add(category)
@@ -57,19 +58,19 @@ class TestGetProducts:
             db.session.add_all(products)
             db.session.commit()
 
-        # Page 1 -> 20 items
+        # Page 1 -> 8 items (25 items over 4 pages at 8 per page)
         page1 = client.get('/products/?page=1').get_json()
-        assert len(page1["products"]) == 20
+        assert len(page1["products"]) == 8
         assert page1["pagination"]["total_items"] == 25
-        assert page1["pagination"]["total_pages"] == 2
+        assert page1["pagination"]["total_pages"] == 4
         assert page1["pagination"]["has_next"] is True
         assert page1["pagination"]["has_prev"] is False
 
-        # Page 2 -> remaining 5 items
+        # Page 2 -> another 8 items, with more pages still to come
         page2 = client.get('/products/?page=2').get_json()
-        assert len(page2["products"]) == 5
+        assert len(page2["products"]) == 8
         assert page2["pagination"]["page"] == 2
-        assert page2["pagination"]["has_next"] is False
+        assert page2["pagination"]["has_next"] is True
         assert page2["pagination"]["has_prev"] is True
 
     def test_pagination_page_below_one_clamps_to_first(self, app, client):
@@ -92,7 +93,7 @@ class TestGetProducts:
 
         assert response.status_code == 200
         assert data["pagination"]["page"] == 1
-        assert len(data["products"]) == 20
+        assert len(data["products"]) == 8
         assert data["pagination"]["has_prev"] is False
 
     def test_pagination_non_integer_page_defaults_to_first(self, app, client):
@@ -115,7 +116,7 @@ class TestGetProducts:
 
         assert response.status_code == 200
         assert data["pagination"]["page"] == 1
-        assert len(data["products"]) == 20
+        assert len(data["products"]) == 8
 
     def test_pagination_page_beyond_last_returns_empty(self, app, client):
         """Test a page past the last page returns an empty list with 200."""
@@ -138,7 +139,7 @@ class TestGetProducts:
         assert data["pagination"]["total_items"] == 1
 
     def test_search_combined_with_pagination(self, app, client):
-        """Test search filter and pagination work together (20 per page over filtered set)."""
+        """Test search filter and pagination work together (8 per page over filtered set)."""
         with app.app_context():
             category = Category(name="Electronics", description="Gadgets")
             db.session.add(category)
@@ -158,16 +159,16 @@ class TestGetProducts:
             db.session.add_all(matching + non_matching)
             db.session.commit()
 
-        # Page 1 of the filtered set -> 20 matching items
+        # Page 1 of the filtered set -> 8 matching items (25 over 4 pages)
         page1 = client.get('/products/?search=wireless&page=1').get_json()
-        assert len(page1["products"]) == 20
+        assert len(page1["products"]) == 8
         assert page1["pagination"]["total_items"] == 25
-        assert page1["pagination"]["total_pages"] == 2
+        assert page1["pagination"]["total_pages"] == 4
         assert all("Wireless Mouse" in p["name"] for p in page1["products"])
 
-        # Page 2 of the filtered set -> remaining 5 matching items
+        # Page 2 of the filtered set -> another 8 matching items
         page2 = client.get('/products/?search=wireless&page=2').get_json()
-        assert len(page2["products"]) == 5
+        assert len(page2["products"]) == 8
         assert page2["pagination"]["page"] == 2
         assert all("Wireless Mouse" in p["name"] for p in page2["products"])
 
@@ -328,7 +329,7 @@ class TestCreateProduct:
             "description": "Wireless mouse",
             "price": 199000,
             "stock": 50
-        }, headers={"Authorization": f"Bearer {admin_token}"})
+        }, headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 201
@@ -341,7 +342,7 @@ class TestCreateProduct:
         response = client.post('/products/', json={
             "name": "Mouse",
             "price": 199000
-        }, headers={"Authorization": f"Bearer {admin_token}"})
+        }, headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 400
@@ -361,7 +362,7 @@ class TestCreateProduct:
             "description": "Invalid name",
             "price": 199000,
             "stock": 50
-        }, headers={"Authorization": f"Bearer {admin_token}"})
+        }, headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 400
@@ -381,7 +382,7 @@ class TestCreateProduct:
             "description": "Wireless",
             "price": "not_a_number",
             "stock": 50
-        }, headers={"Authorization": f"Bearer {admin_token}"})
+        }, headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 400
@@ -401,7 +402,7 @@ class TestCreateProduct:
             "description": "Wireless",
             "price": 0,
             "stock": 50
-        }, headers={"Authorization": f"Bearer {admin_token}"})
+        }, headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 400
@@ -421,7 +422,7 @@ class TestCreateProduct:
             "description": "Wireless",
             "price": 199000,
             "stock": 50.5
-        }, headers={"Authorization": f"Bearer {admin_token}"})
+        }, headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 400
@@ -441,7 +442,7 @@ class TestCreateProduct:
             "description": "Wireless",
             "price": 199000,
             "stock": -5
-        }, headers={"Authorization": f"Bearer {admin_token}"})
+        }, headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 400
@@ -455,7 +456,7 @@ class TestCreateProduct:
             "description": "Wireless",
             "price": 199000,
             "stock": 50
-        }, headers={"Authorization": f"Bearer {admin_token}"})
+        }, headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 404
@@ -481,7 +482,7 @@ class TestCreateProduct:
             "description": "Wireless",
             "price": 199000,
             "stock": 50
-        }, headers={"Authorization": f"Bearer {customer_token}"})
+        }, headers=auth(client, customer_token))
         data = response.get_json()
 
         assert response.status_code == 403
@@ -506,7 +507,7 @@ class TestUpdateProduct:
         response = client.put(f'/products/{prod_id}', json={
             "name": "Updated Mouse",
             "price": 250000
-        }, headers={"Authorization": f"Bearer {admin_token}"})
+        }, headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 200
@@ -517,7 +518,7 @@ class TestUpdateProduct:
         """Test updating non-existent product returns 404."""
         response = client.put('/products/999', json={
             "name": "Updated"
-        }, headers={"Authorization": f"Bearer {admin_token}"})
+        }, headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 404
@@ -537,7 +538,7 @@ class TestUpdateProduct:
 
         response = client.put(f'/products/{prod_id}', json={
             "category_id": 999
-        }, headers={"Authorization": f"Bearer {admin_token}"})
+        }, headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 404
@@ -575,7 +576,7 @@ class TestUpdateProduct:
 
         response = client.put(f'/products/{prod_id}', json={
             "name": "Updated"
-        }, headers={"Authorization": f"Bearer {customer_token}"})
+        }, headers=auth(client, customer_token))
         data = response.get_json()
 
         assert response.status_code == 403
@@ -598,7 +599,7 @@ class TestDeleteProduct:
             prod_id = product.id
 
         response = client.delete(f'/products/{prod_id}',
-            headers={"Authorization": f"Bearer {admin_token}"})
+            headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 200
@@ -607,7 +608,7 @@ class TestDeleteProduct:
     def test_delete_product_not_found(self, client, admin_token):
         """Test deleting non-existent product returns 404."""
         response = client.delete('/products/999',
-            headers={"Authorization": f"Bearer {admin_token}"})
+            headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 404
@@ -643,7 +644,7 @@ class TestDeleteProduct:
             prod_id = product.id
 
         response = client.delete(f'/products/{prod_id}',
-            headers={"Authorization": f"Bearer {admin_token}"})
+            headers=auth(client, admin_token))
         data = response.get_json()
 
         assert response.status_code == 409
@@ -678,7 +679,7 @@ class TestDeleteProduct:
             prod_id = product.id
 
         response = client.delete(f'/products/{prod_id}',
-            headers={"Authorization": f"Bearer {customer_token}"})
+            headers=auth(client, customer_token))
         data = response.get_json()
 
         assert response.status_code == 403
