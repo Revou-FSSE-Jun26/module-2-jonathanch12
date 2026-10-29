@@ -87,7 +87,7 @@ def create_payment():
         db.session.add(payment)
         db.session.flush()  # assigns payment.id without committing
 
-        payment.midtrans_order_id = f"order-{order.id}-{payment.id}"
+        payment.midtrans_order_id = f"order-{order.id}-{payment.id}-ktic"
 
         # Midtrans expects gross_amount as an integer (IDR has no decimals)
         gross_amount = int(round(float(amount)))
