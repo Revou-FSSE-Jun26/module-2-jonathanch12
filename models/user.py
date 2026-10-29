@@ -20,6 +20,7 @@ class User(db.Model):
             'name': self.name,
             'email': self.email,
             'phone': self.phone,
+            'address': self.address,
             'role': self.role,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
