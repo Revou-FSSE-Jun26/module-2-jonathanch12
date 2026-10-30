@@ -624,6 +624,12 @@ https://documenter.getpostman.com/view/57333016/2sBYHSzgiz
 
 ---
 
+### Frontend Repository
+
+The KINETIC Next.js frontend side that runs on this Flask REST API lives in a separate repository: _(link to be added)_.
+
+---
+
 ### Deployment
 
 The deployed project is live and can be accesed at:
