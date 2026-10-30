@@ -44,7 +44,7 @@ The application uses a PostgreSQL database with the following tables:
 | `categories` | Product categories with soft deletion (name, description, is_deleted) |
 | `products` | Products linked to a category with soft deletion (name, description, price, stock, is_deleted) |
 | `images` | Product images linked to a product with soft deletion (product_id, url, public_id, is_deleted). `url` and `public_id` reference the asset stored on Cloudinary |
-| `orders` | Orders placed by users with soft deletion (total_amount, status, is_deleted) |
+| `orders` | Orders placed by users with soft deletion (total_amount, status, customer_name, customer_email, customer_phone, customer_address, is_deleted). The `customer_*` columns are a snapshot of the customer's details at checkout |
 | `order_items` | Association table linking orders to products (quantity, unit_price) |
 | `payments` | Payment attempts for an order via Midtrans (order_id, amount, method, status, transaction_id, midtrans_order_id, signature_key) |
 
@@ -352,7 +352,7 @@ After these steps, the machine is back to its original state: no mkcert binary, 
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/orders/` | Place a new order |
+| POST | `/orders/` | Place a new order (customer details are copied from your profile) |
 | POST | `/payments` | Create a Midtrans payment for one of your own pending orders |
 
 ### Shared Order Routes (Customer and Admin)
@@ -400,6 +400,29 @@ pending --> processing --> delivering --> completed
 **Customer** can only cancel their own order, and only while it is still `pending`.
 
 When an order is cancelled (by either role), the reserved product stock is automatically restored.
+
+### Customer Details on Orders
+
+When a customer places an order (`POST /orders/`), the API copies their `name`, `email`, `phone`, and `address` from the `users` table into the order's `customer_name`, `customer_email`, `customer_phone`, and `customer_address` columns. The client does not send these fields; they always come from the authenticated user's profile.
+
+These values are a snapshot taken at checkout. If the customer later updates their profile via `PUT /users`, existing orders keep the details they were placed with, so order history stays accurate. The four fields are returned in every order response:
+
+```json
+{
+  "id": 1,
+  "user_id": 2,
+  "total_amount": 398000.0,
+  "status": "pending",
+  "order_items": [{ "product_id": 1, "quantity": 2, "unit_price": 199000.0 }],
+  "customer_name": "Sarah Tan",
+  "customer_email": "sarah@example.com",
+  "customer_phone": "081234567890",
+  "customer_address": "Jl. Sudirman No. 1, Jakarta",
+  "created_at": "2026-10-30T10:00:00"
+}
+```
+
+If the user behind the token no longer exists, `POST /orders/` returns `404` with `"User not found"` and no order is created.
 
 ---
 
@@ -449,7 +472,7 @@ Payments are handled through the [Midtrans](https://midtrans.com/) payment gatew
 ### How it works
 
 1. **Create a payment.** A customer calls `POST /payments` with the `order_id` of one of their own `pending` orders. The payment amount is always taken from the order's `total_amount` (never from the client, to prevent tampering).
-2. **A payment row is stored** with status `pending` and a globally unique `midtrans_order_id` in the form `order-<order_id>-<payment_id>`. This per-attempt id is required because Midtrans rejects reused order ids, so it is what makes retries possible.
+2. **A payment row is stored** with status `pending` and a globally unique `midtrans_order_id` in the form `order-<order_id>-<payment_id>-ktic` (for example, `order-12-34-ktic`). This per-attempt id is required because Midtrans rejects reused order ids, so it is what makes retries possible. The `-ktic` suffix marks the transaction as coming from this API version, so payments can be told apart on the Midtrans dashboard.
 3. **The response returns a Snap `token` and `redirect_url`** that the frontend uses to open the Midtrans payment page.
 4. **Midtrans calls the webhook** (`POST /payments/notification`) whenever the transaction status changes. The notification is verified server-side via the Midtrans SDK (which re-fetches the authoritative status) rather than trusting the request body. The matching payment row is then updated with the latest `status`, `method`, `transaction_id`, and `signature_key`.
 5. **The order advances automatically.** When a payment reaches a paid state (`settlement`, or `capture` with `fraud_status = accept`), a still-`pending` order is moved to `processing`. Other statuses leave the order untouched so the customer can retry.
@@ -593,8 +616,10 @@ Protected-route tests authenticate via the `auth()` helper in `tests/_helpers.py
 | `test_category.py` | Category CRUD with admin role checks |
 | `test_product.py` | Product CRUD, validation, and soft deletion |
 | `test_image.py` | Product image CRUD via Cloudinary (file and URL uploads, in-place replace, delete), validation, admin role checks, soft deletion, and Cloudinary failure handling (mocked SDK) |
-| `test_order.py` | Order creation, listing (customer/admin), status workflow, cancellation with restock, and soft deletion |
-| `test_payment.py` | Payment creation (own-order enforcement), access control (public/admin/customer), reads, and the Midtrans webhook |
+| `test_order.py` | Order creation (including customer details copied from the user's profile, the snapshot staying unchanged after a profile update, and `404` for a missing user), listing (customer/admin), status workflow, cancellation with restock, and soft deletion |
+| `test_payment.py` | Payment creation (own-order enforcement, `-ktic` suffixed `midtrans_order_id` stored and sent to Snap), access control (public/admin/customer), reads, and the Midtrans webhook (mocked SDK) |
+
+Orders created directly in tests (outside `POST /orders/`) go through small helpers (`_new_order()` in `test_order.py`, `_make_order()` in `test_payment.py`). They fill in the required `customer_*` columns from the owning user, the same way the route does.
 
 ### Load Testing (Locust)
 

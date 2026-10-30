@@ -17,6 +17,10 @@ class Order(db.Model):
     user_id = db.Column(db.ForeignKey('users.id', ondelete='RESTRICT'), nullable=False)
     total_amount = db.Column(db.Numeric(10, 2), nullable=False)
     status = db.Column(db.String(20), nullable=False, default='pending', server_default='pending')
+    customer_name = db.Column(db.String(255), nullable=False)
+    customer_email = db.Column(db.String(255), nullable=False)
+    customer_phone = db.Column(db.String(255), nullable=False)
+    customer_address = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, server_default=db.FetchedValue())
     is_deleted = db.Column(db.Boolean, nullable=False, server_default=db.text('false'))
     deleted_at = db.Column(db.DateTime, nullable=True)
@@ -42,5 +46,9 @@ class Order(db.Model):
             'total_amount': float(self.total_amount),
             'status': self.status,
             'order_items': items_list,
+            'customer_name': self.customer_name,
+            'customer_email': self.customer_email,
+            'customer_phone': self.customer_phone,
+            'customer_address': self.customer_address,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }

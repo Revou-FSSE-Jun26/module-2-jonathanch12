@@ -60,11 +60,15 @@ def create_order():
                 "unit_price": unit_price,
                 "product": product
             })
-        print(current_user_id)
+            
         # Create the order
         order = Order(
             user_id=current_user_id,
-            total_amount=total_amount
+            total_amount=total_amount,
+            customer_name=user.name,
+            customer_email=user.email,
+            customer_phone=user.phone,
+            customer_address=user.address
         )
         db.session.add(order)
         db.session.flush()  # Get the order ID without committing

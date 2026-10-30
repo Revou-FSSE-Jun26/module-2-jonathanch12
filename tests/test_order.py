@@ -5,6 +5,23 @@ from models import User, Category, Product, Order, order_items
 from tests._helpers import auth
 
 
+def _new_order(user_id, **kwargs):
+    """Build an (unsaved) Order with the customer snapshot fields copied from the user.
+
+    Mirrors POST /orders/, which copies name/email/phone/address from the
+    ordering user into the order's NOT NULL customer_* columns.
+    """
+    user = db.session.get(User, user_id)
+    return Order(
+        user_id=user_id,
+        customer_name=user.name,
+        customer_email=user.email,
+        customer_phone=user.phone,
+        customer_address=user.address,
+        **kwargs
+    )
+
+
 @pytest.fixture
 def customer_user(app):
     """Create a customer user and return their data and token."""
@@ -59,6 +76,63 @@ class TestCreateOrder:
         assert data["order"]["total_amount"] == 199000 * 2
         assert data["order"]["status"] == "pending"
         assert data["status"] == "ok"
+
+    def test_create_order_copies_customer_details_from_user(self, app, client, customer_user, sample_products):
+        """Test the order's customer_* fields are copied from the ordering user's profile."""
+        response = client.post('/orders/', json={
+            "order_items": [{"product_id": sample_products[0]["id"], "quantity": 1}]
+        }, headers=auth(client, customer_user['token']))
+        data = response.get_json()
+
+        assert response.status_code == 201
+        assert data["order"]["customer_name"] == "Customer"
+        assert data["order"]["customer_email"] == "customer@test.com"
+        assert data["order"]["customer_phone"] == "1234567890"
+        assert data["order"]["customer_address"] == "123 St"
+
+        # The values are persisted on the order row, not only in the response
+        with app.app_context():
+            order = Order.query.get(data["order"]["id"])
+            assert order.customer_name == "Customer"
+            assert order.customer_email == "customer@test.com"
+            assert order.customer_phone == "1234567890"
+            assert order.customer_address == "123 St"
+
+    def test_order_customer_details_unchanged_after_profile_update(self, app, client, customer_user, sample_products):
+        """Test the customer details are a snapshot: later profile changes don't alter existing orders."""
+        response = client.post('/orders/', json={
+            "order_items": [{"product_id": sample_products[0]["id"], "quantity": 1}]
+        }, headers=auth(client, customer_user['token']))
+        order_id = response.get_json()["order"]["id"]
+
+        with app.app_context():
+            user = db.session.get(User, customer_user["id"])
+            user.name = "Renamed Customer"
+            user.email = "renamed@test.com"
+            user.phone = "0000000000"
+            user.address = "999 New Address"
+            db.session.commit()
+
+            order = Order.query.get(order_id)
+            assert order.customer_name == "Customer"
+            assert order.customer_email == "customer@test.com"
+            assert order.customer_phone == "1234567890"
+            assert order.customer_address == "123 St"
+
+    def test_create_order_user_not_found(self, app, client, sample_products):
+        """Test a customer token for a user that no longer exists returns 404 and creates no order."""
+        with app.app_context():
+            token = create_access_token(identity="9999", additional_claims={"role": "customer"})
+
+        response = client.post('/orders/', json={
+            "order_items": [{"product_id": sample_products[0]["id"], "quantity": 1}]
+        }, headers=auth(client, token))
+        data = response.get_json()
+
+        assert response.status_code == 404
+        assert data["message"] == "User not found"
+        with app.app_context():
+            assert Order.query.count() == 0
 
     def test_stock_reduced_after_order(self, app, client, customer_user, sample_products):
         """Test product stock is reduced after order creation."""
@@ -249,8 +323,8 @@ class TestGetOrders:
     def test_customer_only_sees_own_orders(self, app, client, customer_user, admin_user):
         """Test customer sees only their own orders, not other users' orders."""
         with app.app_context():
-            own_order = Order(user_id=customer_user["id"], total_amount=100000, status="pending")
-            other_order = Order(user_id=admin_user["id"], total_amount=200000, status="pending")
+            own_order = _new_order(user_id=customer_user["id"], total_amount=100000, status="pending")
+            other_order = _new_order(user_id=admin_user["id"], total_amount=200000, status="pending")
             db.session.add_all([own_order, other_order])
             db.session.commit()
 
@@ -265,8 +339,8 @@ class TestGetOrders:
     def test_admin_gets_all_orders(self, app, client, customer_user, admin_user):
         """Test admin can view orders from all customers."""
         with app.app_context():
-            order1 = Order(user_id=customer_user["id"], total_amount=100000, status="pending")
-            order2 = Order(user_id=admin_user["id"], total_amount=200000, status="pending")
+            order1 = _new_order(user_id=customer_user["id"], total_amount=100000, status="pending")
+            order2 = _new_order(user_id=admin_user["id"], total_amount=200000, status="pending")
             db.session.add_all([order1, order2])
             db.session.commit()
 
@@ -281,7 +355,7 @@ class TestGetOrders:
     def test_get_orders_excludes_deleted(self, app, client, customer_user):
         """Test get orders returns only non-deleted orders."""
         with app.app_context():
-            order = Order(user_id=customer_user["id"], total_amount=100000, status="pending", is_deleted=True)
+            order = _new_order(user_id=customer_user["id"], total_amount=100000, status="pending", is_deleted=True)
             db.session.add(order)
             db.session.commit()
 
@@ -295,8 +369,8 @@ class TestGetOrders:
     def test_admin_get_orders_excludes_deleted(self, app, client, customer_user, admin_user):
         """Test admin get orders also excludes soft-deleted orders."""
         with app.app_context():
-            active = Order(user_id=customer_user["id"], total_amount=100000, status="pending")
-            deleted = Order(user_id=customer_user["id"], total_amount=200000, status="pending", is_deleted=True)
+            active = _new_order(user_id=customer_user["id"], total_amount=100000, status="pending")
+            deleted = _new_order(user_id=customer_user["id"], total_amount=200000, status="pending", is_deleted=True)
             db.session.add_all([active, deleted])
             db.session.commit()
 
@@ -342,7 +416,7 @@ class TestGetOrders:
         """Test the first page returns at most 8 orders when more exist."""
         with app.app_context():
             orders = [
-                Order(user_id=customer_user["id"], total_amount=100000 + i, status="pending")
+                _new_order(user_id=customer_user["id"], total_amount=100000 + i, status="pending")
                 for i in range(25)
             ]
             db.session.add_all(orders)
@@ -363,7 +437,7 @@ class TestGetOrders:
         """Test the second page returns another full page of orders."""
         with app.app_context():
             orders = [
-                Order(user_id=customer_user["id"], total_amount=100000 + i, status="pending")
+                _new_order(user_id=customer_user["id"], total_amount=100000 + i, status="pending")
                 for i in range(25)
             ]
             db.session.add_all(orders)
@@ -416,8 +490,8 @@ class TestGetOrders:
         """Test filtering orders by status."""
         with app.app_context():
             db.session.add_all([
-                Order(user_id=customer_user["id"], total_amount=100000, status="pending"),
-                Order(user_id=customer_user["id"], total_amount=200000, status="completed"),
+                _new_order(user_id=customer_user["id"], total_amount=100000, status="pending"),
+                _new_order(user_id=customer_user["id"], total_amount=200000, status="completed"),
             ])
             db.session.commit()
 
@@ -444,8 +518,8 @@ class TestGetOrders:
         """Test admin can filter orders by a specific user_id."""
         with app.app_context():
             db.session.add_all([
-                Order(user_id=customer_user["id"], total_amount=100000, status="pending"),
-                Order(user_id=admin_user["id"], total_amount=200000, status="pending"),
+                _new_order(user_id=customer_user["id"], total_amount=100000, status="pending"),
+                _new_order(user_id=admin_user["id"], total_amount=200000, status="pending"),
             ])
             db.session.commit()
 
@@ -481,9 +555,9 @@ class TestGetOrders:
         """Test filtering orders by a total_amount range."""
         with app.app_context():
             db.session.add_all([
-                Order(user_id=customer_user["id"], total_amount=50000, status="pending"),
-                Order(user_id=customer_user["id"], total_amount=150000, status="pending"),
-                Order(user_id=customer_user["id"], total_amount=300000, status="pending"),
+                _new_order(user_id=customer_user["id"], total_amount=50000, status="pending"),
+                _new_order(user_id=customer_user["id"], total_amount=150000, status="pending"),
+                _new_order(user_id=customer_user["id"], total_amount=300000, status="pending"),
             ])
             db.session.commit()
 
@@ -529,11 +603,11 @@ class TestGetOrders:
         from datetime import datetime
         with app.app_context():
             db.session.add_all([
-                Order(user_id=customer_user["id"], total_amount=100000, status="pending",
+                _new_order(user_id=customer_user["id"], total_amount=100000, status="pending",
                       created_at=datetime(2026, 1, 1, 10, 0, 0)),
-                Order(user_id=customer_user["id"], total_amount=200000, status="pending",
+                _new_order(user_id=customer_user["id"], total_amount=200000, status="pending",
                       created_at=datetime(2026, 1, 15, 23, 30, 0)),
-                Order(user_id=customer_user["id"], total_amount=300000, status="pending",
+                _new_order(user_id=customer_user["id"], total_amount=300000, status="pending",
                       created_at=datetime(2026, 2, 1, 0, 0, 0)),
             ])
             db.session.commit()
@@ -593,7 +667,7 @@ class TestGetOrderById:
     def test_admin_views_order(self, app, client, admin_token, customer_user):
         """Test admin can view a specific order."""
         with app.app_context():
-            order = Order(user_id=customer_user["id"], total_amount=199000, status="pending")
+            order = _new_order(user_id=customer_user["id"], total_amount=199000, status="pending")
             db.session.add(order)
             db.session.commit()
             order_id = order.id
@@ -609,7 +683,7 @@ class TestGetOrderById:
     def test_customer_views_own_order(self, app, client, customer_user):
         """Test customer can view the details of their own order."""
         with app.app_context():
-            order = Order(user_id=customer_user["id"], total_amount=199000, status="pending")
+            order = _new_order(user_id=customer_user["id"], total_amount=199000, status="pending")
             db.session.add(order)
             db.session.commit()
             order_id = order.id
@@ -626,7 +700,7 @@ class TestGetOrderById:
     def test_customer_cannot_view_other_users_order(self, app, client, customer_user, admin_user):
         """Test customer cannot view another user's order (403)."""
         with app.app_context():
-            order = Order(user_id=admin_user["id"], total_amount=199000, status="pending")
+            order = _new_order(user_id=admin_user["id"], total_amount=199000, status="pending")
             db.session.add(order)
             db.session.commit()
             order_id = order.id
@@ -659,7 +733,7 @@ class TestGetOrderById:
     def test_get_soft_deleted_order(self, app, client, admin_token, customer_user):
         """Test getting soft-deleted order returns 404."""
         with app.app_context():
-            order = Order(user_id=customer_user["id"], total_amount=199000, status="pending", is_deleted=True)
+            order = _new_order(user_id=customer_user["id"], total_amount=199000, status="pending", is_deleted=True)
             db.session.add(order)
             db.session.commit()
             order_id = order.id
@@ -674,7 +748,7 @@ class TestGetOrderById:
     def test_customer_get_own_soft_deleted_order_not_found(self, app, client, customer_user):
         """Test a customer gets 404 for their own soft-deleted order."""
         with app.app_context():
-            order = Order(user_id=customer_user["id"], total_amount=199000, status="pending", is_deleted=True)
+            order = _new_order(user_id=customer_user["id"], total_amount=199000, status="pending", is_deleted=True)
             db.session.add(order)
             db.session.commit()
             order_id = order.id
@@ -695,7 +769,7 @@ class TestGetOrderById:
     def test_get_order_unknown_role(self, app, client, customer_user):
         """Test getting order with an unknown role returns 403."""
         with app.app_context():
-            order = Order(user_id=customer_user["id"], total_amount=199000, status="pending")
+            order = _new_order(user_id=customer_user["id"], total_amount=199000, status="pending")
             db.session.add(order)
             db.session.commit()
             order_id = order.id
@@ -717,7 +791,7 @@ class TestUpdateOrder:
     def test_admin_updates_status_successfully(self, app, client, admin_user, customer_user):
         """Test admin can update order status to any valid value."""
         with app.app_context():
-            order = Order(user_id=customer_user["id"], total_amount=199000, status="pending")
+            order = _new_order(user_id=customer_user["id"], total_amount=199000, status="pending")
             db.session.add(order)
             db.session.commit()
             order_id = order.id
@@ -734,7 +808,7 @@ class TestUpdateOrder:
     def test_admin_full_forward_flow(self, app, client, admin_user, customer_user):
         """Test admin can advance an order through the full valid flow."""
         with app.app_context():
-            order = Order(user_id=customer_user["id"], total_amount=199000, status="pending")
+            order = _new_order(user_id=customer_user["id"], total_amount=199000, status="pending")
             db.session.add(order)
             db.session.commit()
             order_id = order.id
@@ -750,7 +824,7 @@ class TestUpdateOrder:
     def test_admin_cannot_revert_status(self, app, client, admin_user, customer_user):
         """Test admin cannot revert status backwards (processing -> pending)."""
         with app.app_context():
-            order = Order(user_id=customer_user["id"], total_amount=199000, status="processing")
+            order = _new_order(user_id=customer_user["id"], total_amount=199000, status="processing")
             db.session.add(order)
             db.session.commit()
             order_id = order.id
@@ -766,7 +840,7 @@ class TestUpdateOrder:
     def test_admin_cannot_skip_status(self, app, client, admin_user, customer_user):
         """Test admin cannot skip statuses (pending -> delivering)."""
         with app.app_context():
-            order = Order(user_id=customer_user["id"], total_amount=199000, status="pending")
+            order = _new_order(user_id=customer_user["id"], total_amount=199000, status="pending")
             db.session.add(order)
             db.session.commit()
             order_id = order.id
@@ -782,7 +856,7 @@ class TestUpdateOrder:
     def test_admin_can_cancel_from_delivering(self, app, client, admin_user, customer_user):
         """Test admin can cancel an order that is in delivering status (Option A)."""
         with app.app_context():
-            order = Order(user_id=customer_user["id"], total_amount=199000, status="delivering")
+            order = _new_order(user_id=customer_user["id"], total_amount=199000, status="delivering")
             db.session.add(order)
             db.session.commit()
             order_id = order.id
@@ -823,7 +897,7 @@ class TestUpdateOrder:
     def test_update_order_missing_status(self, app, client, admin_user, customer_user):
         """Test updating order without status returns 400."""
         with app.app_context():
-            order = Order(user_id=customer_user["id"], total_amount=199000, status="pending")
+            order = _new_order(user_id=customer_user["id"], total_amount=199000, status="pending")
             db.session.add(order)
             db.session.commit()
             order_id = order.id
@@ -838,7 +912,7 @@ class TestUpdateOrder:
     def test_update_order_invalid_status(self, app, client, admin_user, customer_user):
         """Test updating order with an invalid status returns 400."""
         with app.app_context():
-            order = Order(user_id=customer_user["id"], total_amount=199000, status="pending")
+            order = _new_order(user_id=customer_user["id"], total_amount=199000, status="pending")
             db.session.add(order)
             db.session.commit()
             order_id = order.id
@@ -864,7 +938,7 @@ class TestUpdateOrder:
     def test_update_completed_order(self, app, client, admin_user, customer_user):
         """Test updating an already completed order returns 409."""
         with app.app_context():
-            order = Order(user_id=customer_user["id"], total_amount=199000, status="completed")
+            order = _new_order(user_id=customer_user["id"], total_amount=199000, status="completed")
             db.session.add(order)
             db.session.commit()
             order_id = order.id
@@ -880,7 +954,7 @@ class TestUpdateOrder:
     def test_update_cancelled_order(self, app, client, admin_user, customer_user):
         """Test updating an already cancelled order returns 409."""
         with app.app_context():
-            order = Order(user_id=customer_user["id"], total_amount=199000, status="cancelled")
+            order = _new_order(user_id=customer_user["id"], total_amount=199000, status="cancelled")
             db.session.add(order)
             db.session.commit()
             order_id = order.id
@@ -898,7 +972,7 @@ class TestUpdateOrder:
     def test_customer_cancels_own_pending_order(self, app, client, customer_user):
         """Test customer can cancel their own pending order."""
         with app.app_context():
-            order = Order(user_id=customer_user["id"], total_amount=199000, status="pending")
+            order = _new_order(user_id=customer_user["id"], total_amount=199000, status="pending")
             db.session.add(order)
             db.session.commit()
             order_id = order.id
@@ -914,7 +988,7 @@ class TestUpdateOrder:
     def test_customer_cannot_update_other_users_order(self, app, client, customer_user, admin_user):
         """Test customer cannot update another user's order."""
         with app.app_context():
-            order = Order(user_id=admin_user["id"], total_amount=199000, status="pending")
+            order = _new_order(user_id=admin_user["id"], total_amount=199000, status="pending")
             db.session.add(order)
             db.session.commit()
             order_id = order.id
@@ -930,7 +1004,7 @@ class TestUpdateOrder:
     def test_customer_cannot_set_non_cancelled_status(self, app, client, customer_user):
         """Test customer cannot set a status other than cancelled."""
         with app.app_context():
-            order = Order(user_id=customer_user["id"], total_amount=199000, status="pending")
+            order = _new_order(user_id=customer_user["id"], total_amount=199000, status="pending")
             db.session.add(order)
             db.session.commit()
             order_id = order.id
@@ -946,7 +1020,7 @@ class TestUpdateOrder:
     def test_customer_cannot_cancel_non_pending_order(self, app, client, customer_user):
         """Test customer cannot cancel an order that is not pending."""
         with app.app_context():
-            order = Order(user_id=customer_user["id"], total_amount=199000, status="processing")
+            order = _new_order(user_id=customer_user["id"], total_amount=199000, status="processing")
             db.session.add(order)
             db.session.commit()
             order_id = order.id
@@ -987,7 +1061,7 @@ class TestDeleteOrder:
     def test_admin_deletes_order_successfully(self, app, client, admin_token, customer_user):
         """Test admin can soft-delete an order."""
         with app.app_context():
-            order = Order(user_id=customer_user["id"], total_amount=199000, status="pending")
+            order = _new_order(user_id=customer_user["id"], total_amount=199000, status="pending")
             db.session.add(order)
             db.session.commit()
             order_id = order.id
@@ -1011,7 +1085,7 @@ class TestDeleteOrder:
     def test_delete_order_delivering_status(self, app, client, admin_token, customer_user):
         """Test cannot delete order with 'delivering' status."""
         with app.app_context():
-            order = Order(user_id=customer_user["id"], total_amount=199000, status="delivering")
+            order = _new_order(user_id=customer_user["id"], total_amount=199000, status="delivering")
             db.session.add(order)
             db.session.commit()
             order_id = order.id
@@ -1026,7 +1100,7 @@ class TestDeleteOrder:
     def test_delete_order_processing_status(self, app, client, admin_token, customer_user):
         """Test cannot delete order with 'processing' status."""
         with app.app_context():
-            order = Order(user_id=customer_user["id"], total_amount=199000, status="processing")
+            order = _new_order(user_id=customer_user["id"], total_amount=199000, status="processing")
             db.session.add(order)
             db.session.commit()
             order_id = order.id

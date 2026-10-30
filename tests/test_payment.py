@@ -43,8 +43,22 @@ def admin_user(app):
 
 
 def _make_order(user_id, total_amount=199000, status="pending", is_deleted=False):
-    """Helper to persist an order and return its id."""
-    order = Order(user_id=user_id, total_amount=total_amount, status=status, is_deleted=is_deleted)
+    """Helper to persist an order and return its id.
+
+    The customer_* snapshot fields are NOT NULL, so they are copied from the
+    owning user, mirroring what POST /orders/ does.
+    """
+    user = db.session.get(User, user_id)
+    order = Order(
+        user_id=user_id,
+        total_amount=total_amount,
+        status=status,
+        is_deleted=is_deleted,
+        customer_name=user.name,
+        customer_email=user.email,
+        customer_phone=user.phone,
+        customer_address=user.address,
+    )
     db.session.add(order)
     db.session.commit()
     return order.id
@@ -106,7 +120,10 @@ class TestCreatePayment:
         assert data["payment"]["amount"] == 500000
 
     def test_payment_row_persisted_with_midtrans_order_id(self, app, client, customer_user, mock_snap):
-        """A payment row is stored with the per-attempt midtrans_order_id (order-<order>-<payment>)."""
+        """A payment row is stored with the per-attempt midtrans_order_id (order-<order>-<payment>-ktic).
+
+        The -ktic suffix identifies which API version created the payment on the Midtrans side.
+        """
         with app.app_context():
             order_id = _make_order(customer_user["id"])
 
@@ -117,7 +134,26 @@ class TestCreatePayment:
         with app.app_context():
             payment = Payment.query.get(payment_id)
             assert payment is not None
-            assert payment.midtrans_order_id == f"order-{order_id}-{payment_id}"
+            assert payment.midtrans_order_id == f"order-{order_id}-{payment_id}-ktic"
+
+    def test_snap_receives_ktic_suffixed_order_id(self, app, client, customer_user, mock_snap):
+        """The order_id sent to Midtrans Snap carries the -ktic suffix and matches the stored row."""
+        with app.app_context():
+            order_id = _make_order(customer_user["id"], total_amount=199000)
+
+        response = client.post('/payments', json={"order_id": order_id},
+            headers=auth(client, customer_user['token']))
+        payment_id = response.get_json()["payment"]["id"]
+
+        snap_instance = mock_snap.Snap.return_value
+        snap_instance.create_transaction.assert_called_once()
+        snap_param = snap_instance.create_transaction.call_args[0][0]
+
+        expected_id = f"order-{order_id}-{payment_id}-ktic"
+        assert snap_param["transaction_details"]["order_id"] == expected_id
+        assert snap_param["transaction_details"]["order_id"].endswith("-ktic")
+        assert snap_param["transaction_details"]["gross_amount"] == 199000
+        assert response.get_json()["payment"]["midtrans_order_id"] == expected_id
 
     def test_customer_cannot_pay_for_other_users_order(self, app, client, customer_user, other_customer, mock_snap):
         """A customer cannot create a payment for an order owned by another user (403)."""
@@ -363,10 +399,10 @@ class TestPaymentNotification:
         """A settlement notification marks the payment paid and advances a pending order to processing."""
         with app.app_context():
             order_id = _make_order(customer_user["id"], status="pending")
-            payment_id = _make_payment(order_id, status="pending", midtrans_order_id="order-X-1")
+            payment_id = _make_payment(order_id, status="pending", midtrans_order_id="order-X-1-ktic")
 
         verified = {
-            "order_id": "order-X-1",
+            "order_id": "order-X-1-ktic",
             "transaction_status": "settlement",
             "fraud_status": "accept",
             "payment_type": "bank_transfer",
@@ -395,10 +431,10 @@ class TestPaymentNotification:
         """A pending notification updates the payment but does not advance the order."""
         with app.app_context():
             order_id = _make_order(customer_user["id"], status="pending")
-            payment_id = _make_payment(order_id, status="pending", midtrans_order_id="order-Y-1")
+            payment_id = _make_payment(order_id, status="pending", midtrans_order_id="order-Y-1-ktic")
 
         verified = {
-            "order_id": "order-Y-1",
+            "order_id": "order-Y-1-ktic",
             "transaction_status": "pending",
             "fraud_status": "accept",
             "payment_type": "gopay",
