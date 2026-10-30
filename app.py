@@ -115,3 +115,9 @@ def create_app(config=None):
     app.register_blueprint(payment_bp)
 
     return app
+
+
+# Top-level WSGI instance. Vercel's Flask preset (and any WSGI server such as
+# gunicorn) imports this module and looks for a Flask object named ``app``.
+# The factory above is still used directly by tests and run_local.py.
+app = create_app()

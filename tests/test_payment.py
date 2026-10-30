@@ -120,9 +120,9 @@ class TestCreatePayment:
         assert data["payment"]["amount"] == 500000
 
     def test_payment_row_persisted_with_midtrans_order_id(self, app, client, customer_user, mock_snap):
-        """A payment row is stored with the per-attempt midtrans_order_id (order-<order>-<payment>-ktic).
+        """A payment row is stored with the per-attempt midtrans_order_id (order-<order>-<payment>-live).
 
-        The -ktic suffix identifies which API version created the payment on the Midtrans side.
+        The -live suffix identifies which API version created the payment on the Midtrans side.
         """
         with app.app_context():
             order_id = _make_order(customer_user["id"])
@@ -134,10 +134,10 @@ class TestCreatePayment:
         with app.app_context():
             payment = Payment.query.get(payment_id)
             assert payment is not None
-            assert payment.midtrans_order_id == f"order-{order_id}-{payment_id}-ktic"
+            assert payment.midtrans_order_id == f"order-{order_id}-{payment_id}-live"
 
-    def test_snap_receives_ktic_suffixed_order_id(self, app, client, customer_user, mock_snap):
-        """The order_id sent to Midtrans Snap carries the -ktic suffix and matches the stored row."""
+    def test_snap_receives_live_suffixed_order_id(self, app, client, customer_user, mock_snap):
+        """The order_id sent to Midtrans Snap carries the -live suffix and matches the stored row."""
         with app.app_context():
             order_id = _make_order(customer_user["id"], total_amount=199000)
 
@@ -149,9 +149,9 @@ class TestCreatePayment:
         snap_instance.create_transaction.assert_called_once()
         snap_param = snap_instance.create_transaction.call_args[0][0]
 
-        expected_id = f"order-{order_id}-{payment_id}-ktic"
+        expected_id = f"order-{order_id}-{payment_id}-live"
         assert snap_param["transaction_details"]["order_id"] == expected_id
-        assert snap_param["transaction_details"]["order_id"].endswith("-ktic")
+        assert snap_param["transaction_details"]["order_id"].endswith("-live")
         assert snap_param["transaction_details"]["gross_amount"] == 199000
         assert response.get_json()["payment"]["midtrans_order_id"] == expected_id
 
@@ -399,10 +399,10 @@ class TestPaymentNotification:
         """A settlement notification marks the payment paid and advances a pending order to processing."""
         with app.app_context():
             order_id = _make_order(customer_user["id"], status="pending")
-            payment_id = _make_payment(order_id, status="pending", midtrans_order_id="order-X-1-ktic")
+            payment_id = _make_payment(order_id, status="pending", midtrans_order_id="order-X-1-live")
 
         verified = {
-            "order_id": "order-X-1-ktic",
+            "order_id": "order-X-1-live",
             "transaction_status": "settlement",
             "fraud_status": "accept",
             "payment_type": "bank_transfer",
@@ -431,10 +431,10 @@ class TestPaymentNotification:
         """A pending notification updates the payment but does not advance the order."""
         with app.app_context():
             order_id = _make_order(customer_user["id"], status="pending")
-            payment_id = _make_payment(order_id, status="pending", midtrans_order_id="order-Y-1-ktic")
+            payment_id = _make_payment(order_id, status="pending", midtrans_order_id="order-Y-1-live")
 
         verified = {
-            "order_id": "order-Y-1-ktic",
+            "order_id": "order-Y-1-live",
             "transaction_status": "pending",
             "fraud_status": "accept",
             "payment_type": "gopay",

@@ -630,7 +630,17 @@ class TestDeleteProduct:
             db.session.add(product)
             db.session.commit()
 
-            order = Order(user_id=user.id, total_amount=199000, status="pending")
+            # customer_* snapshot fields are NOT NULL; copy them from the
+            # owning user, mirroring what POST /orders/ does.
+            order = Order(
+                user_id=user.id,
+                total_amount=199000,
+                status="pending",
+                customer_name=user.name,
+                customer_email=user.email,
+                customer_phone=user.phone,
+                customer_address=user.address,
+            )
             db.session.add(order)
             db.session.commit()
 
