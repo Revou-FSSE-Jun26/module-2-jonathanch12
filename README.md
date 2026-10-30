@@ -651,7 +651,9 @@ https://documenter.getpostman.com/view/57333016/2sBYHSzgiz
 
 ### Frontend Repository
 
-The KINETIC Next.js frontend side that runs on this Flask REST API lives in a separate repository: _(link to be added)_.
+The KINETIC Next.js frontend side that runs on this Flask REST API lives in a separate repository: 
+
+https://github.com/jonathanch12/kinetic-fe
 
 ---
 
@@ -659,10 +661,10 @@ The KINETIC Next.js frontend side that runs on this Flask REST API lives in a se
 
 The deployed project is live and can be accesed at:
 
-https://revoshop-flask.vercel.app/
+https://kinetic-fe.vercel.app/
 
 > [!NOTE]  
-> **Live Demo Status:** The production deployment on [Vercel](https://revoshop-flask.vercel.app/) reflects the stable release at commit [`05dc237`](https://github.com/Revou-FSSE-Jun26/module-2-jonathanch12/commit/05dc2379b12fad4fcdd35ef460c33d0bf8ecab12) (v1.0.0).  
+> **Live Demo Status:** The production deployment on [Vercel](https://kinetic-fe.vercel.app/) reflects the stable release at commit [`8f54207`](https://github.com/jonathanch12/kinetic-be/commit/8f542074dfb07630f4c946ac1106c017e55e6e9d). 
 > Recent commits on the `main` branch contain unreleased updates and work-in-progress features that are not yet deployed.
 
 ---

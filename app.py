@@ -86,7 +86,7 @@ def create_app(config=None):
         origin.strip()
         for origin in os.getenv(
             "FRONTEND_ORIGINS",
-            "http://localhost:3000,https://localhost:3000,https://kinetic-fe.vercel.app/",
+            "http://localhost:3000,https://localhost:3000,https://kinetic-fe.vercel.app",
         ).split(",")
         if origin.strip()
     ]
