@@ -661,10 +661,10 @@ https://github.com/jonathanch12/kinetic-fe
 
 The deployed project is live and can be accesed at:
 
-https://kinetic-fe.vercel.app/
+https://kinetic-be.vercel.app/
 
 > [!NOTE]  
-> **Live Demo Status:** The production deployment on [Vercel](https://kinetic-fe.vercel.app/) reflects the stable release at commit [`8f54207`](https://github.com/jonathanch12/kinetic-be/commit/8f542074dfb07630f4c946ac1106c017e55e6e9d). 
+> **Live Demo Status:** The production deployment on [Vercel](https://kinetic-be.vercel.app/) reflects the stable release at commit [`8f54207`](https://github.com/jonathanch12/kinetic-be/commit/8f542074dfb07630f4c946ac1106c017e55e6e9d). 
 > Recent commits on the `main` branch contain unreleased updates and work-in-progress features that are not yet deployed.
 
 ---
