@@ -176,8 +176,9 @@ MIDTRANS_IS_PRODUCTION="false"
 CLOUDINARY_CLOUD_NAME="your-cloudinary-cloud-name"
 CLOUDINARY_API_KEY="your-cloudinary-api-key"
 CLOUDINARY_API_SECRET="your-cloudinary-api-secret"
-FRONTEND_ORIGINS="http://localhost:3000"
+FRONTEND_ORIGINS="http://localhost:3000,https://localhost:3000"
 JWT_COOKIE_SECURE="true"
+FRONTEND_URL="http://localhost:5000,https://localhost:5000"
 ```
 
 `FRONTEND_ORIGINS` is a comma-separated list of origins allowed by CORS (the front-end app runs on a separate origin). Include every origin the front end is served from, for example `http://localhost:3000,https://your-frontend.vercel.app`. If unset, it defaults to `http://localhost:3000`.
