@@ -48,6 +48,7 @@ def create_app(config=None):
     app.config['MIDTRANS_SERVER_KEY'] = os.getenv("MIDTRANS_SERVER_KEY")
     app.config['MIDTRANS_CLIENT_KEY'] = os.getenv("MIDTRANS_CLIENT_KEY")
     app.config['MIDTRANS_IS_PRODUCTION'] = os.getenv("MIDTRANS_IS_PRODUCTION", "false").lower() == "true"
+    app.config["FRONTEND_URL"] = os.getenv("FRONTEND_URL")
 
     # Cloudinary media storage configuration
     app.config['CLOUDINARY_CLOUD_NAME'] = os.getenv("CLOUDINARY_CLOUD_NAME")

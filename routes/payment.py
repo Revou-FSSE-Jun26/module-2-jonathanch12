@@ -93,7 +93,7 @@ def create_payment():
         gross_amount = int(round(float(amount)))
 
         snap = _build_snap_client()
-        frontend_url = current_app.config["FRONTEND_URL"]
+        frontend_url = current_app.config.get("FRONTEND_URL")
         snap_param = {
             "transaction_details": {
                 "order_id": payment.midtrans_order_id,
